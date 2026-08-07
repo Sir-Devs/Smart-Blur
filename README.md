@@ -43,7 +43,7 @@ The extension is not published on the Chrome Web Store yet, so it is installed m
 
 1. Download or clone the project:
    ```bash
-   git clone https://github.com/ahmadalhalabi/smart-blur.git
+   git clone https://github.com/ahmadcodes-de/smart-blur.git
    ```
    Or download the ZIP from GitHub and extract it into a permanent folder.
 
