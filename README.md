@@ -1,4 +1,4 @@
-# 🧿 Smart Blur
+# 🧿 Smart Blur On [Chrome Webstore](https://chromewebstore.google.com/detail/smart-blur/jpldganokfniaogppagfgbbelcdpkgim)
 
 **A privacy overlay for Google Chrome.** It blurs the whole page and keeps a clear "spotlight" that follows your mouse cursor, so only the part you are actually reading is legible to anyone else looking at your screen.
 
