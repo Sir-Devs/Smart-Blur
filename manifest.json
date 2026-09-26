@@ -1,12 +1,14 @@
 {
   "manifest_version": 3,
-  "name": "Smart Blur",
-  "version": "2.5",
-  "description": "Blurs the screen for privacy and keeps a clear spotlight that follows your mouse cursor.",
+  "name": "__MSG_extName__",
+  "short_name": "Smart Blur",
+  "version": "3.0",
+  "description": "__MSG_extDescription__",
+  "default_locale": "en",
   "author": "Ahmad Alhalabi",
   "homepage_url": "https://ahmadalhalabi.com/",
+  "minimum_chrome_version": "120",
   "permissions": [
-    "activeTab",
     "storage",
     "scripting"
   ],
@@ -15,7 +17,20 @@
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Smart Blur"
+    "default_title": "__MSG_extName__",
+    "default_icon": {
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
+  },
+  "commands": {
+    "toggle-global": {
+      "suggested_key": {
+        "default": "Alt+Shift+S"
+      },
+      "description": "__MSG_commandToggle__"
+    }
   },
   "content_scripts": [
     {
@@ -23,13 +38,26 @@
         "<all_urls>"
       ],
       "js": [
+        "settings.js",
         "content.js"
       ],
       "css": [
         "content.css"
       ],
-      "run_at": "document_end",
+      "run_at": "document_start",
       "all_frames": false
+    },
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "frame.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true,
+      "match_about_blank": true,
+      "match_origin_as_fallback": true
     }
   ],
   "background": {
