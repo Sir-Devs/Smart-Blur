@@ -1,471 +1,296 @@
-/* ============================================================================
-   Smart Blur — content script
-   ----------------------------------------------------------------------------
-   Developed by Ahmad Alhalabi — https://ahmadalhalabi.com/
-   Copyright (c) 2025-2026 Ahmad Alhalabi. All rights reserved.
-   Released under the MIT License. See LICENSE for details.
-   ========================================================================== */
-
 (function () {
     'use strict';
-    if (window.top !== window.self) return;
 
-    // =====================================================================
-    // Constants
-    // =====================================================================
+    if (window.top !== window) return;
 
-    const OVERLAY_ID = 'smart-blur-overlay';
-    const SPOTLIGHT_ID = 'smart-blur-spotlight';
-    const PICKER_ID = 'smart-blur-picker';
+    const Settings = self.SmartBlurSettings;
+    if (!Settings) return;
 
-    const CLASS_IDLE = 'sb-idle';
-    const CLASS_DIMMING = 'sb-dimming';
-    const CLASS_INSTANT = 'sb-instant';
-    const CLASS_BLACKOUT = 'sb-blackout';
-    const CLASS_ACTIVE = 'sb-active';
-    const CLASS_PICKING = 'sb-picking';
-    const CLASS_LABEL_INSIDE = 'sb-label-inside';
-    const CLASS_CLUTTER = 'sb-clutter';
-    const CLASS_MAIN = 'sb-focus-main';
+    const IDS = {
+        veil: 'smart-blur-veil',
+        ring: 'smart-blur-ring',
+        marquee: 'smart-blur-marquee',
+        toast: 'smart-blur-toast'
+    };
 
-    const DEFAULT_SIZE = 170;
-    const MIN_SIZE = 60;
-    const MAX_SIZE = 400;
-    const HOLE_RATIO = 2.75;
-    const MEDIA_SLOTS = 3;
-
-    const SLOT_VARS = [
-        { x: '--v-x',  y: '--v-y',  w: '--v-w',  h: '--v-h'  },
-        { x: '--v2-x', y: '--v2-y', w: '--v2-w', h: '--v2-h' },
-        { x: '--v3-x', y: '--v3-y', w: '--v3-w', h: '--v3-h' }
+    // ids from older versions too, in case an orphaned script left them behind
+    const STALE_IDS = [
+        'smart-blur-overlay', 'smart-blur-spotlight', 'smart-blur-picker',
+        IDS.veil, IDS.ring, IDS.marquee, IDS.toast
     ];
 
-    const PARKED = { x: '-9999px', y: '-9999px', w: '0px', h: '0px' };
+    const TEARDOWN_EVENT = 'smart-blur:teardown';
+
+    const XHTML_NS = 'http://www.w3.org/1999/xhtml';
+
+    const CUTOUT_SLOTS = 4;
+    const PARKED_POSITION = '-9999px -9999px';
+    const PARKED_SIZE = '0px 0px';
 
     const MEDIA_SELECTOR = [
         'video',
-        'iframe[src*="youtube.com"]',
+        'iframe[src*="youtube.com/embed"]',
         'iframe[src*="youtube-nocookie.com"]',
-        'iframe[src*="youtu.be"]',
-        'iframe[src*="vimeo.com"]',
-        'iframe[src*="dailymotion.com"]',
-        'iframe[src*="twitch.tv"]'
+        'iframe[src*="player.vimeo.com"]',
+        'iframe[src*="dailymotion.com/embed"]',
+        'iframe[src*="geo.dailymotion.com"]',
+        'iframe[src*="player.twitch.tv"]'
     ].join(',');
 
-    const AD_SELECTOR = [
-        'ins.adsbygoogle',
-        '[id^="google_ads"]',
-        '[id*="div-gpt-ad"]',
-        '[data-ad-slot]',
-        '[data-ad-client]',
-        'aside',
-        '[role="complementary"]',
-        '[class*="sidebar"]',
-        '[id*="sidebar"]',
-        '[class*="advert"]',
-        '[id*="advert"]',
-        '[class*="promo"]',
-        '[class*="newsletter"]',
-        '[class*="related-post"]',
-        '[class*="recommend"]'
-    ].join(',');
-
-    const MIN_CLUTTER_AREA = 6000;
+    const MIN_MEDIA_AREA = 100 * 80;
     const MIN_PICK_AREA = 400;
+    const RESCAN_THROTTLE_MS = 400;
+    const REATTACH_LIMIT = 5;
+    const GEOMETRY_POLL_MS = 250;
+    const DOUBLE_ESC_MS = 450;
+    const TOAST_MS = 2800;
+    const WHEEL_STEP = 50;
 
-    const MUTATION_DEBOUNCE_MS = 350;
-    const IO_ROOT_MARGIN = '150px';
-    const MEDIA_POLL_MS = 250;
-    const DEFAULT_IDLE_TIMEOUT = 15000;
-    const IDLE_CHOICES = [0, 5000, 15000, 30000];
-
-    // =====================================================================
-    // State
-    // =====================================================================
-
-    let overlay = null;
-    let spotlight = null;
-    let picker = null;
-    let pickerLabel = null;
-
-    let isEnabled = false;
-    let currentSite = window.location.hostname;
-
-    const settings = {
-        spotlightSize: DEFAULT_SIZE,
-        blurVideos: false,
-        articleFocus: false,
-        idleTimeout: DEFAULT_IDLE_TIMEOUT,
-        panicEnabled: true
+    const SHAPE_MODES = {
+        close:   { rank: 0, duration: '700ms', easing: 'ease-in' },
+        normal:  { rank: 1, duration: '160ms', easing: 'ease' },
+        instant: { rank: 2, duration: '0ms',   easing: 'linear' }
     };
 
-    // Frame lane
-    let pointerX = -9999;
-    let pointerY = -9999;
-    let pointerDirty = false;
-    let mediaDirty = false;
-    let pickDirty = false;
-    let frameRafId = null;
+    const PICK_LABELS = {
+        ARTICLE: 'pickArticle', MAIN: 'pickMain', SECTION: 'pickSection',
+        P: 'pickParagraph', BLOCKQUOTE: 'pickParagraph',
+        H1: 'pickHeading', H2: 'pickHeading', H3: 'pickHeading',
+        H4: 'pickHeading', H5: 'pickHeading', H6: 'pickHeading',
+        UL: 'pickList', OL: 'pickList', DL: 'pickList',
+        TABLE: 'pickTable',
+        IMG: 'pickImage', PICTURE: 'pickImage', FIGURE: 'pickImage',
+        SVG: 'pickImage', CANVAS: 'pickImage',
+        VIDEO: 'pickVideo', IFRAME: 'pickVideo',
+        NAV: 'pickNavigation', HEADER: 'pickHeader', FOOTER: 'pickFooter',
+        ASIDE: 'pickSidebar', FORM: 'pickForm'
+    };
 
-    // Mutate lane
-    let mutateRafId = null;
-    const writeQueue = [];
+    const platform = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || '';
+    const ALT_NAME = /mac/i.test(platform) ? 'Option' : 'Alt';
 
-    // Scan lane
-    let scanHandle = null;
-    let scanIsIdleCallback = false;
+    const PASSIVE_CAPTURE = { passive: true, capture: true };
 
-    // Observers
-    let mediaObserver = null;
-    let mediaResizeObserver = null;
-    let clutterObserver = null;
-    let domObserver = null;
-    let domDebounceTimer = null;
-    let mediaPollTimer = null;
+    const site = Settings.siteKeyFromUrl(location.href);
+    let settings = Settings.normalize({});
 
-    const visibleMedia = new Map();
-    const observedMedia = new WeakSet();
-    const observedClutter = new WeakSet();
+    let destroyed = false;
+    let loaded = false;
+    let mounted = false;
+    let nodes = null;
 
-    const slotCache = [];
-    for (let i = 0; i < MEDIA_SLOTS; i++) slotCache.push(null);
-
-    // Interactive focus
-    let pickBase = null;
-    let pickDepth = 0;
-    let pickTarget = null;
-    let pickShown = false;
-    let focusRoot = null;
-    let wheelBound = false;
-
-    // Spotlight size state
-    let autoBlurred = false;
+    const pointer = { x: 0, y: 0, inside: false };
     let panicOn = false;
-    let lastMoveAt = 0;
-    let idleTimer = null;
+    let autoBlurred = false;
+    let lastActivity = 0;
+    let idleTimer = 0;
+    let lastEscAt = 0;
 
-    let lastUrl = location.href;
+    let focusRoot = null;
+    let focusPage = '';
+    const pick = { active: false, base: null, depth: 0, target: null, shown: false, wheel: 0 };
 
-    // =====================================================================
-    // Scheduling primitives
-    // =====================================================================
+    let frameId = 0;
+    const dirty = { pointer: false, shape: false, geometry: false, pick: false };
+    let shapeMode = 'normal';
+    let lastMaskPosition = '';
+    let lastMaskSize = '';
 
-    function scheduleFrame() {
-        if (frameRafId === null) frameRafId = requestAnimationFrame(renderFrame);
-    }
+    let mediaObserver = null;
+    let resizeObserver = null;
+    let domObserver = null;
+    let rescanTimer = 0;
+    let pollTimer = 0;
+    let toastTimer = 0;
+    const visibleMedia = new Map();
+    let observedMedia = new WeakSet();
+    let reattachWindow = 0;
+    let reattachCount = 0;
 
-    function scheduleWrite(job) {
-        writeQueue.push(job);
-        if (mutateRafId === null) mutateRafId = requestAnimationFrame(flushWrites);
-    }
-
-    function flushWrites() {
-        mutateRafId = null;
-        const jobs = writeQueue.splice(0, writeQueue.length);
-        for (let i = 0; i < jobs.length; i++) {
-            try { jobs[i](); } catch (error) { }
+    function t(key, substitutions) {
+        try {
+            return chrome.i18n.getMessage(key, substitutions) || '';
+        } catch {
+            return '';
         }
     }
 
-    function scheduleScan(fn) {
-        cancelScan();
-        if (typeof window.requestIdleCallback === 'function') {
-            scanIsIdleCallback = true;
-            scanHandle = window.requestIdleCallback(fn, { timeout: 1000 });
-        } else {
-            scanIsIdleCallback = false;
-            scanHandle = window.setTimeout(fn, 50);
+    function isContextAlive() {
+        try {
+            return Boolean(chrome.runtime && chrome.runtime.id);
+        } catch {
+            return false;
         }
-    }
-
-    function cancelScan() {
-        if (scanHandle === null) return;
-        if (scanIsIdleCallback && typeof window.cancelIdleCallback === 'function') {
-            window.cancelIdleCallback(scanHandle);
-        } else if (!scanIsIdleCallback) {
-            window.clearTimeout(scanHandle);
-        }
-        scanHandle = null;
-    }
-
-    // =====================================================================
-    // Helpers
-    // =====================================================================
-    function clampSize(value) {
-        const n = Number(value);
-        if (!Number.isFinite(n)) return DEFAULT_SIZE;
-        return Math.min(MAX_SIZE, Math.max(MIN_SIZE, n));
-    }
-
-    function clampIdle(value) {
-        const n = Number(value);
-        if (!Number.isFinite(n)) return DEFAULT_IDLE_TIMEOUT;
-        return IDLE_CHOICES.indexOf(n) === -1 ? DEFAULT_IDLE_TIMEOUT : n;
     }
 
     function isOwnNode(node) {
-        return !!node && node.nodeType === 1 &&
-            (node.id === OVERLAY_ID || node.id === SPOTLIGHT_ID || node.id === PICKER_ID);
+        if (!nodes || !node) return false;
+        return node === nodes.veil || node === nodes.ring ||
+            nodes.marquee.contains(node) || nodes.toast.contains(node);
     }
 
-    // =====================================================================
-    // Spotlight size — three sources of truth, one resolved value
-    // =====================================================================
-    function effectiveSize() {
-        if (panicOn || autoBlurred) return 0;
-        return settings.spotlightSize;
+    function createNode(id) {
+        const el = document.createElement('div');
+        el.id = id;
+        el.popover = 'manual';
+        el.setAttribute('aria-hidden', 'true');
+        return el;
     }
 
-    function writeSize(mode) {
-        if (!overlay || !spotlight) return;
-
-        const px = effectiveSize();
-        const holeRadius = (px * HOLE_RATIO) / 2;
-        const dim = mode === 'dim';
-        const instant = mode === 'instant';
-
-        overlay.classList.toggle(CLASS_DIMMING, dim);
-        spotlight.classList.toggle(CLASS_DIMMING, dim);
-        overlay.classList.toggle(CLASS_INSTANT, instant);
-        spotlight.classList.toggle(CLASS_INSTANT, instant);
-        spotlight.classList.toggle(CLASS_BLACKOUT, px === 0);
-
-        overlay.style.setProperty('--sb-hole', holeRadius + 'px');
-        spotlight.style.setProperty('--sb-size', px + 'px');
-
-        if (instant) {
-            requestAnimationFrame(function () {
-                if (!overlay || !spotlight) return;
-                overlay.classList.remove(CLASS_INSTANT);
-                spotlight.classList.remove(CLASS_INSTANT);
-            });
-        }
+    function requestFrame() {
+        if (!frameId && mounted) frameId = requestAnimationFrame(render);
     }
 
-    // =====================================================================
-    // Idle auto-blur
-    // =====================================================================
-    function armIdleTimer(delay) {
-        if (idleTimer !== null) { clearTimeout(idleTimer); idleTimer = null; }
-        if (!settings.idleTimeout) return;
-        idleTimer = setTimeout(checkIdle, delay);
+    function requestShape(mode) {
+        if (!dirty.shape || SHAPE_MODES[mode].rank > SHAPE_MODES[shapeMode].rank) shapeMode = mode;
+        dirty.shape = true;
+        requestFrame();
     }
 
-    function cancelIdleBlur() {
-        if (idleTimer !== null) { clearTimeout(idleTimer); idleTimer = null; }
-        if (autoBlurred) {
-            autoBlurred = false;
-            scheduleWrite(function () { writeSize('instant'); });
-        }
+    function requestGeometry() {
+        dirty.geometry = true;
+        requestFrame();
     }
 
-    function checkIdle() {
-        idleTimer = null;
-        if (!overlay || !isEnabled) return;
+    function render() {
+        frameId = 0;
+        if (!mounted) return;
 
-        if (!settings.idleTimeout) return;
-
-        const elapsed = performance.now() - lastMoveAt;
-
-        if (elapsed >= settings.idleTimeout) {
-            if (!autoBlurred) {
-                autoBlurred = true;
-                scheduleWrite(function () { writeSize('dim'); });
-            }
-        } else {
-            armIdleTimer(settings.idleTimeout - elapsed);
-        }
-    }
-
-    // =====================================================================
-    // Frame lane
-    // =====================================================================
-    function handleMouseMove(event) {
-        if (!overlay) return;
-
-        pointerX = event.clientX;
-        pointerY = event.clientY;
-        pointerDirty = true;
-
-        const wantPick = settings.articleFocus && event.altKey === true;
-        pickBase = wantPick ? event.target : null;
-
-        if (wantPick) {
-            if (!wheelBound) bindWheel();
-            const html = document.documentElement;
-            if (!html.classList.contains(CLASS_PICKING)) html.classList.add(CLASS_PICKING);
+        if (!isContextAlive()) {
+            destroy();
+            return;
         }
 
-        const next = resolvePickTarget();
-        if (next !== pickTarget) {
-            pickTarget = next;
-            pickDirty = true;
+        const rects = dirty.geometry ? readCutouts() : null;
+        const pickBox = dirty.pick ? readPickBox() : undefined;
+
+        if (dirty.pointer) writePointer();
+        if (dirty.shape) writeShape(shapeMode);
+        if (rects) writeCutouts(rects);
+        if (pickBox !== undefined) writePickBox(pickBox);
+
+        dirty.pointer = dirty.shape = dirty.geometry = dirty.pick = false;
+    }
+
+    function spotlightRadius() {
+        if (!pointer.inside || panicOn || autoBlurred || focusRoot) return 0;
+        return settings.spotlightSize / 2;
+    }
+
+    function writePointer() {
+        const x = pointer.x + 'px';
+        const y = pointer.y + 'px';
+        nodes.veil.style.setProperty('--sb-x', x);
+        nodes.veil.style.setProperty('--sb-y', y);
+        nodes.ring.style.setProperty('--sb-x', x);
+        nodes.ring.style.setProperty('--sb-y', y);
+    }
+
+    function writeShape(mode) {
+        const preset = SHAPE_MODES[mode];
+        const radius = spotlightRadius();
+        const veil = nodes.veil;
+        const ring = nodes.ring;
+
+        for (const el of [veil, ring]) {
+            el.style.setProperty('--sb-dur', preset.duration);
+            el.style.setProperty('--sb-ease', preset.easing);
+            el.style.setProperty('--sb-r', radius + 'px');
         }
 
-        scheduleFrame();
+        veil.style.setProperty('--sb-blur', settings.blurStrength + 'px');
+        veil.classList.toggle('sb-panic', panicOn);
+        ring.classList.toggle('sb-hidden', radius === 0);
     }
 
-    function invalidateMediaGeometry() {
-        if (!overlay) return;
-        mediaDirty = true;
-        scheduleFrame();
-    }
-
-    function renderFrame() {
-        frameRafId = null;
-        if (!overlay || !spotlight) return;
-        let slots = null;
-        if (mediaDirty) {
-            mediaDirty = false;
-            slots = readMediaSlots();
-        }
-
-        let pickBox;
-        let pickChanged = false;
-        if (pickDirty) {
-            pickDirty = false;
-            pickChanged = true;
-            pickBox = readPickBox();
-        }
-
-        if (pointerDirty) {
-            pointerDirty = false;
-            lastMoveAt = performance.now();
-
-            if (autoBlurred) {
-                autoBlurred = false;
-                writeSize('instant');
-            }
-            if (idleTimer === null && !panicOn) {
-                armIdleTimer(settings.idleTimeout);
-            }
-
-            const x = pointerX + 'px';
-            const y = pointerY + 'px';
-            overlay.style.setProperty('--sb-x', x);
-            overlay.style.setProperty('--sb-y', y);
-            spotlight.style.setProperty('--sb-x', x);
-            spotlight.style.setProperty('--sb-y', y);
-
-            overlay.classList.remove(CLASS_IDLE);
-            spotlight.classList.remove(CLASS_IDLE);
-        }
-
-        if (pickChanged) writePickBox(pickBox);
-        if (slots !== null) writeMediaSlots(slots);
-    }
-
-    function handleMouseLeave(event) {
-        if (!overlay || !spotlight) return;
-        if (event.relatedTarget !== null && event.relatedTarget.nodeName !== 'HTML') return;
-
-        pointerDirty = false;
-        overlay.classList.add(CLASS_IDLE);
-        spotlight.classList.add(CLASS_IDLE);
-    }
-
-    function handleMouseEnter() {
-        if (!overlay || !spotlight) return;
-        overlay.classList.remove(CLASS_IDLE);
-        spotlight.classList.remove(CLASS_IDLE);
-    }
-
-    // =====================================================================
-    // Feature — media cut-out
-    // =====================================================================
-    function readMediaSlots() {
-        if (settings.blurVideos || panicOn) return [];
-
-        const ranked = [];
-
-        visibleMedia.forEach(function (area, el) {
-            if (!el.isConnected) {
-                visibleMedia.delete(el);
-                return;
-            }
-            ranked.push({ el: el, area: area });
+    function pushRect(list, rect, minArea) {
+        if (rect.width * rect.height < minArea) return;
+        if (rect.bottom <= 0 || rect.right <= 0) return;
+        if (rect.top >= window.innerHeight || rect.left >= window.innerWidth) return;
+        list.push({
+            x: Math.round(rect.left),
+            y: Math.round(rect.top),
+            w: Math.round(rect.width),
+            h: Math.round(rect.height)
         });
+    }
 
-        if (ranked.length === 0) return [];
+    function readCutouts() {
+        const rects = [];
+        if (panicOn) return rects;
 
-        ranked.sort(function (a, b) { return b.area - a.area; });
+        if (focusRoot && !autoBlurred && focusRoot.isConnected) {
+            pushRect(rects, focusRoot.getBoundingClientRect(), 1);
+        }
 
-        const vw = window.innerWidth;
-        const vh = window.innerHeight;
-        const slots = [];
-
-        for (let i = 0; i < ranked.length && slots.length < MEDIA_SLOTS; i++) {
-            const rect = ranked[i].el.getBoundingClientRect();
-
-            if (rect.width < 1 || rect.height < 1) continue;
-            if (rect.bottom <= 0 || rect.top >= vh) continue;
-            if (rect.right <= 0 || rect.left >= vw) continue;
-
-            slots.push({
-                x: Math.round(rect.left) + 'px',
-                y: Math.round(rect.top) + 'px',
-                w: Math.round(rect.width) + 'px',
-                h: Math.round(rect.height) + 'px'
+        if (settings.keepVideosClear && visibleMedia.size > 0) {
+            const ranked = [];
+            visibleMedia.forEach(function (area, el) {
+                if (!el.isConnected) {
+                    visibleMedia.delete(el);
+                    return;
+                }
+                if (el !== focusRoot) ranked.push({ el, area });
             });
-        }
+            ranked.sort(function (a, b) { return b.area - a.area; });
 
-        return slots;
-    }
-
-    function writeMediaSlots(slots) {
-        for (let i = 0; i < MEDIA_SLOTS; i++) {
-            const next = slots[i] || PARKED;
-            const prev = slotCache[i];
-
-            if (prev &&
-                prev.x === next.x && prev.y === next.y &&
-                prev.w === next.w && prev.h === next.h) {
-                continue;
+            for (let i = 0; i < ranked.length && rects.length < CUTOUT_SLOTS; i++) {
+                pushRect(rects, ranked[i].el.getBoundingClientRect(), MIN_MEDIA_AREA);
             }
+        }
+        return rects;
+    }
 
-            const vars = SLOT_VARS[i];
-            overlay.style.setProperty(vars.x, next.x);
-            overlay.style.setProperty(vars.y, next.y);
-            overlay.style.setProperty(vars.w, next.w);
-            overlay.style.setProperty(vars.h, next.h);
+    function writeCutouts(rects) {
+        let position = '0 0';
+        let size = '100% 100%';
 
-            slotCache[i] = next;
+        for (let i = 0; i < CUTOUT_SLOTS; i++) {
+            const r = rects[i];
+            position += ', ' + (r ? r.x + 'px ' + r.y + 'px' : PARKED_POSITION);
+            size += ', ' + (r ? r.w + 'px ' + r.h + 'px' : PARKED_SIZE);
+        }
+
+        if (position !== lastMaskPosition) {
+            nodes.veil.style.setProperty('mask-position', position);
+            lastMaskPosition = position;
+        }
+        if (size !== lastMaskSize) {
+            nodes.veil.style.setProperty('mask-size', size);
+            lastMaskSize = size;
         }
     }
 
-    function handleMediaIntersect(entries) {
-        for (let i = 0; i < entries.length; i++) {
-            const entry = entries[i];
-            const el = entry.target;
+    function updatePoll() {
+        const needed = mounted && !panicOn &&
+            (focusRoot !== null || (settings.keepVideosClear && visibleMedia.size > 0));
 
+        if (needed && !pollTimer) {
+            pollTimer = setInterval(requestGeometry, GEOMETRY_POLL_MS);
+        } else if (!needed && pollTimer) {
+            clearInterval(pollTimer);
+            pollTimer = 0;
+        }
+    }
+
+    function onMediaIntersect(entries) {
+        for (const entry of entries) {
+            const el = entry.target;
             if (entry.isIntersecting && el.isConnected) {
                 const r = entry.intersectionRect;
                 visibleMedia.set(el, r.width * r.height);
-                if (mediaResizeObserver) mediaResizeObserver.observe(el);
+                if (resizeObserver) resizeObserver.observe(el);
             } else {
                 visibleMedia.delete(el);
-                if (mediaResizeObserver) mediaResizeObserver.unobserve(el);
+                if (resizeObserver && el !== focusRoot) resizeObserver.unobserve(el);
             }
         }
-
-        updateMediaPoll();
-        invalidateMediaGeometry();
-    }
-
-    function updateMediaPoll() {
-        const shouldPoll = visibleMedia.size > 0 && !settings.blurVideos && !panicOn;
-
-        if (shouldPoll && mediaPollTimer === null) {
-            mediaPollTimer = window.setInterval(invalidateMediaGeometry, MEDIA_POLL_MS);
-        } else if (!shouldPoll && mediaPollTimer !== null) {
-            window.clearInterval(mediaPollTimer);
-            mediaPollTimer = null;
-        }
+        updatePoll();
+        requestGeometry();
     }
 
     function scanMedia() {
         if (!mediaObserver) return;
-
         const found = document.querySelectorAll(MEDIA_SELECTOR);
         for (let i = 0; i < found.length; i++) {
             const el = found[i];
@@ -475,15 +300,83 @@
         }
     }
 
-    // =====================================================================
-    // Feature — interactive focus (Alt+hover / Alt+click)
-    // =====================================================================
-    function resolvePickTarget() {
-        let el = pickBase;
-        if (!el || el.nodeType !== 1) return null;
+    function markActivity() {
+        lastActivity = performance.now();
+        if (autoBlurred) {
+            autoBlurred = false;
+            requestShape('instant');
+            requestGeometry();
+        }
+        if (!idleTimer && !panicOn) armIdle(settings.idleTimeout);
+    }
 
-        let climb = pickDepth;
-        while (climb-- > 0) {
+    function armIdle(delay) {
+        if (idleTimer) {
+            clearTimeout(idleTimer);
+            idleTimer = 0;
+        }
+        if (!mounted || !settings.idleTimeout) return;
+        idleTimer = setTimeout(checkIdle, delay);
+    }
+
+    function checkIdle() {
+        idleTimer = 0;
+        if (!mounted || !settings.idleTimeout || panicOn) return;
+
+        const elapsed = performance.now() - lastActivity;
+        if (elapsed < settings.idleTimeout) {
+            armIdle(settings.idleTimeout - elapsed);
+            return;
+        }
+        if (!autoBlurred) {
+            autoBlurred = true;
+            requestShape(document.visibilityState === 'visible' ? 'close' : 'instant');
+            requestGeometry();
+        }
+    }
+
+    function handleEscape(event) {
+        if (event.repeat || event.isComposing) return;
+        if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+        handleEscapePress();
+    }
+
+    // A single Esc belongs to the page (dialogs, fullscreen), so panic needs two.
+    function handleEscapePress() {
+        if (!settings.panicEnabled) return;
+        const now = performance.now();
+        if (now - lastEscAt <= DOUBLE_ESC_MS) {
+            lastEscAt = 0;
+            setPanic(!panicOn);
+        } else {
+            lastEscAt = now;
+        }
+    }
+
+    function setPanic(on) {
+        if (panicOn === on) return;
+        panicOn = on;
+
+        if (on) {
+            if (idleTimer) {
+                clearTimeout(idleTimer);
+                idleTimer = 0;
+            }
+            stopPicking();
+        } else {
+            lastActivity = performance.now();
+            armIdle(settings.idleTimeout);
+        }
+
+        updatePoll();
+        requestShape('instant');
+        requestGeometry();
+    }
+
+    function resolvePick(base, depth) {
+        let el = base;
+        if (!el || el.nodeType !== 1) return null;
+        while (depth-- > 0) {
             const parent = el.parentElement;
             if (!parent || parent === document.body || parent === document.documentElement) break;
             el = parent;
@@ -491,24 +384,118 @@
         return el;
     }
 
-    function describeElement(el) {
-        let text = el.tagName.toLowerCase();
-        if (el.id) text += '#' + el.id;
-        else if (typeof el.className === 'string' && el.className.trim()) {
-            text += '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.');
+    function startPicking(base) {
+        if (pick.active || focusRoot || panicOn) return;
+        pick.active = true;
+        pick.depth = 0;
+        pick.wheel = 0;
+        pick.base = base || null;
+        document.documentElement.classList.add('sb-picking');
+        window.addEventListener('wheel', onPickWheel, { capture: true, passive: false });
+        retarget();
+    }
+
+    function stopPicking() {
+        if (!pick.active) return;
+        pick.active = false;
+        pick.base = null;
+        pick.target = null;
+        pick.depth = 0;
+        document.documentElement.classList.remove('sb-picking');
+        window.removeEventListener('wheel', onPickWheel, { capture: true });
+        dirty.pick = true;
+        requestFrame();
+    }
+
+    function retarget() {
+        const next = resolvePick(pick.base, pick.depth);
+        if (next !== pick.target) {
+            pick.target = next;
+            dirty.pick = true;
+            requestFrame();
         }
-        if (text.length > 44) text = text.slice(0, 43) + '…';
-        return text + (pickDepth > 0 ? '  ↑' + pickDepth : '');
+    }
+
+    function onPickWheel(event) {
+        if (!pick.active) return;
+        if (!event.altKey) {
+            stopPicking();
+            return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        if (!pick.base) return;
+
+        pick.wheel += event.deltaY;
+        if (Math.abs(pick.wheel) < WHEEL_STEP) return;
+        const widen = pick.wheel < 0;
+        pick.wheel = 0;
+
+        if (widen) {
+            if (resolvePick(pick.base, pick.depth + 1) !== pick.target) pick.depth++;
+        } else if (pick.depth > 0) {
+            pick.depth--;
+        }
+        retarget();
+    }
+
+    function onPickPointer(event) {
+        if (!event.altKey || (!settings.articleFocus && !focusRoot)) return;
+
+        // Alt+click on a link starts a download in Chrome, so swallow the whole click.
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (event.type !== 'click') return;
+
+        if (focusRoot) {
+            setFocus(null, false);
+            return;
+        }
+
+        const target = (pick.active && pick.target) || event.target;
+        if (!target || target.nodeType !== 1 || isOwnNode(target)) return;
+        if (target === document.body || target === document.documentElement) return;
+        const rect = target.getBoundingClientRect();
+        if (rect.width * rect.height < MIN_PICK_AREA) return;
+        setFocus(target, false);
+    }
+
+    function pageKey() {
+        return location.origin + location.pathname + location.search;
+    }
+
+    function setFocus(el, silent) {
+        if (el === focusRoot) return;
+        if (focusRoot && resizeObserver && !visibleMedia.has(focusRoot)) {
+            resizeObserver.unobserve(focusRoot);
+        }
+
+        const hadFocus = focusRoot !== null;
+        focusRoot = el;
+        focusPage = el ? pageKey() : '';
+        if (el && resizeObserver) resizeObserver.observe(el);
+
+        stopPicking();
+        updatePoll();
+        requestShape('normal');
+        requestGeometry();
+
+        if (silent) return;
+        if (el) showToast(t('toastLocked', [ALT_NAME]));
+        else if (hadFocus) showToast(t('toastReleased'));
+    }
+
+    function labelFor(el) {
+        const key = PICK_LABELS[el.tagName.toUpperCase()] || 'pickBlock';
+        return t(key) + '  ·  ' + t('pickHint');
     }
 
     function readPickBox() {
-        if (!pickTarget || !pickTarget.isConnected) return null;
-        if (isOwnNode(pickTarget)) return null;
+        const el = pick.active ? pick.target : null;
+        if (!el || !el.isConnected || isOwnNode(el)) return null;
+        if (el === document.body || el === document.documentElement) return null;
 
-        const tag = pickTarget.tagName;
-        if (tag === 'HTML' || tag === 'BODY') return null;
-
-        const rect = pickTarget.getBoundingClientRect();
+        const rect = el.getBoundingClientRect();
         if (rect.width * rect.height < MIN_PICK_AREA) return null;
 
         return {
@@ -516,573 +503,425 @@
             y: Math.round(rect.top) + 'px',
             w: Math.round(rect.width) + 'px',
             h: Math.round(rect.height) + 'px',
-            label: describeElement(pickTarget),
-            labelInside: rect.top < 24
+            label: labelFor(el),
+            labelInside: rect.top < 28
         };
     }
 
     function writePickBox(box) {
-        if (!picker) return;
-
+        const marquee = nodes.marquee;
         if (!box) {
-            if (pickShown) {
-                picker.classList.remove(CLASS_ACTIVE);
-                pickShown = false;
+            if (pick.shown) {
+                marquee.classList.remove('sb-show');
+                pick.shown = false;
             }
             return;
         }
 
-        picker.style.setProperty('--p-x', box.x);
-        picker.style.setProperty('--p-y', box.y);
-        picker.style.setProperty('--p-w', box.w);
-        picker.style.setProperty('--p-h', box.h);
+        marquee.style.setProperty('--p-x', box.x);
+        marquee.style.setProperty('--p-y', box.y);
+        marquee.style.setProperty('--p-w', box.w);
+        marquee.style.setProperty('--p-h', box.h);
+        if (nodes.marqueeLabel.textContent !== box.label) nodes.marqueeLabel.textContent = box.label;
+        marquee.classList.toggle('sb-label-inside', box.labelInside);
 
-        if (pickerLabel && pickerLabel.textContent !== box.label) {
-            pickerLabel.textContent = box.label;
-        }
-        picker.classList.toggle(CLASS_LABEL_INSIDE, box.labelInside);
-
-        if (!pickShown) {
-            picker.classList.add(CLASS_ACTIVE);
-            pickShown = true;
+        if (!pick.shown) {
+            marquee.classList.add('sb-show');
+            pick.shown = true;
         }
     }
 
-    function clearPicker() {
-        pickBase = null;
-        pickTarget = null;
-        pickDepth = 0;
-        pickDirty = true;
-        unbindWheel();
-        document.documentElement.classList.remove(CLASS_PICKING);
-        scheduleFrame();
+    function showToast(text) {
+        if (!nodes || !text) return;
+        const toast = nodes.toast;
+        toast.textContent = text;
+        toast.classList.add('sb-show');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(function () {
+            if (nodes) nodes.toast.classList.remove('sb-show');
+        }, TOAST_MS);
     }
 
-    function bindWheel() {
-        if (wheelBound) return;
-        window.addEventListener('wheel', handlePickWheel, { capture: true, passive: false });
-        wheelBound = true;
-    }
+    function onPointerMove(event) {
+        pointer.x = event.clientX;
+        pointer.y = event.clientY;
+        dirty.pointer = true;
 
-    function unbindWheel() {
-        if (!wheelBound) return;
-        window.removeEventListener('wheel', handlePickWheel, { capture: true });
-        wheelBound = false;
-    }
-
-    function handlePickWheel(event) {
-        if (!settings.articleFocus || !event.altKey || !pickBase) return;
-
-        event.preventDefault();
-        event.stopPropagation();
-
-        if (event.deltaY < 0) {
-            pickDepth++;
-        } else if (event.deltaY > 0 && pickDepth > 0) {
-            pickDepth--;
-        } else {
-            return;
+        if (!pointer.inside) {
+            pointer.inside = true;
+            requestShape('instant');
         }
+        markActivity();
 
-        const next = resolvePickTarget();
-        if (next === pickTarget) {
-            if (event.deltaY < 0) pickDepth--;
-            return;
-        }
-
-        pickTarget = next;
-        pickDirty = true;
-        scheduleFrame();
-    }
-
-    function handlePickClick(event) {
-        if (!settings.articleFocus || !event.altKey) return;
-
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-
-        if (event.type !== 'click') return;
-
-        if (focusRoot) {
-            setFocusRoot(null);
-            return;
-        }
-
-        pickBase = event.target;
-        const target = resolvePickTarget();
-
-        if (!target || target.nodeType !== 1) return;
-        if (isOwnNode(target)) return;
-
-        const tag = target.tagName;
-        if (tag === 'HTML' || tag === 'BODY') return;
-
-        setFocusRoot(target);
-    }
-
-    function setFocusRoot(el) {
-        const previous = focusRoot;
-        focusRoot = el;
-
-        if (!el) {
-            scheduleWrite(clearClutter);
-            clearPicker();
-            return;
-        }
-
-        const clutter = collectClutter(el);
-
-        scheduleWrite(function () {
-            if (previous) previous.classList.remove(CLASS_MAIN);
-            clearClutter();
-            el.classList.add(CLASS_MAIN);
-
-            for (let i = 0; i < clutter.length; i++) {
-                const node = clutter[i];
-                if (observedClutter.has(node)) continue;
-                observedClutter.add(node);
-                if (clutterObserver) clutterObserver.observe(node);
+        if (pick.active) {
+            if (!event.altKey) {
+                stopPicking();
+            } else if (event.target !== pick.base) {
+                pick.base = event.target;
+                retarget();
             }
-        });
+        } else if (event.altKey && settings.articleFocus) {
+            startPicking(event.target);
+        }
 
-        clearPicker();
+        requestFrame();
     }
 
-    function collectClutter(main) {
-        const candidates = new Set();
-        let node = main;
+    function onDragOver(event) {
+        pointer.x = event.clientX;
+        pointer.y = event.clientY;
+        dirty.pointer = true;
+        if (!pointer.inside) {
+            pointer.inside = true;
+            requestShape('instant');
+        }
+        markActivity();
+        requestFrame();
+    }
 
-        while (node && node.parentElement && node !== document.body) {
-            const siblings = node.parentElement.children;
-            for (let i = 0; i < siblings.length; i++) {
-                if (siblings[i] !== node) candidates.add(siblings[i]);
+    function onPointerOut(event) {
+        if (event.relatedTarget || !pointer.inside) return;
+        pointer.inside = false;
+        requestShape('normal');
+    }
+
+    function onKeyDown(event) {
+        markActivity();
+
+        if (event.key === 'Escape') {
+            handleEscape(event);
+        } else if (event.key === 'Alt' && !event.repeat && settings.articleFocus) {
+            startPicking(pointer.inside ? document.elementFromPoint(pointer.x, pointer.y) : null);
+        }
+    }
+
+    function onKeyUp(event) {
+        if (event.key === 'Alt') stopPicking();
+    }
+
+    function onDomMutations(records) {
+        if (!isAttached()) reattachNow();
+
+        let raise = false;
+        let relevant = false;
+        for (let i = 0; i < records.length; i++) {
+            const record = records[i];
+            if (record.type === 'attributes') {
+                if (record.attributeName === 'open' && record.target.localName === 'dialog' &&
+                    record.target.hasAttribute('open')) raise = true;
+                relevant = true;
+            } else if (!relevant && !isOwnNode(record.target)) {
+                relevant = true;
             }
-            node = node.parentElement;
         }
 
-        const ads = document.querySelectorAll(AD_SELECTOR);
-        for (let i = 0; i < ads.length; i++) candidates.add(ads[i]);
-
-        const keep = [];
-
-        candidates.forEach(function (el) {
-            if (isOwnNode(el)) return;
-
-            const tag = el.tagName;
-            if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'LINK' ||
-                tag === 'NOSCRIPT' || tag === 'TEMPLATE') return;
-
-            if (el.contains(main) || main.contains(el)) return;
-            if (el.querySelector(MEDIA_SELECTOR)) return;
-
-            let redundant = false;
-            candidates.forEach(function (other) {
-                if (other !== el && other.contains(el)) redundant = true;
-            });
-            if (redundant) return;
-
-            const rect = el.getBoundingClientRect();
-            if (rect.width * rect.height < MIN_CLUTTER_AREA) return;
-
-            keep.push(el);
-        });
-
-        return keep;
+        if (raise) showLayers();
+        if (relevant && !rescanTimer) rescanTimer = setTimeout(rescan, RESCAN_THROTTLE_MS);
     }
 
-    function handleClutterIntersect(entries) {
-        if (!settings.articleFocus || !focusRoot) return;
+    function rescan() {
+        rescanTimer = 0;
+        if (!mounted) return;
 
-        const enter = [];
-        const leave = [];
+        if (!isAttached()) attachNodes();
 
-        for (let i = 0; i < entries.length; i++) {
-            const entry = entries[i];
-            if (!entry.target.isConnected) continue;
-            (entry.isIntersecting ? enter : leave).push(entry.target);
-        }
+        if (focusRoot && (pageKey() !== focusPage || !focusRoot.isConnected)) setFocus(null, true);
 
-        if (enter.length === 0 && leave.length === 0) return;
-
-        scheduleWrite(function () {
-            for (let i = 0; i < enter.length; i++) enter[i].classList.add(CLASS_CLUTTER);
-            for (let i = 0; i < leave.length; i++) leave[i].classList.remove(CLASS_CLUTTER);
-        });
-    }
-
-    function clearClutter() {
-        if (clutterObserver) clutterObserver.disconnect();
-
-        const marked = document.querySelectorAll('.' + CLASS_CLUTTER + ', .' + CLASS_MAIN);
-        for (let i = 0; i < marked.length; i++) {
-            marked[i].classList.remove(CLASS_CLUTTER, CLASS_MAIN);
-        }
-    }
-
-    function refreshFocus() {
-        if (!settings.articleFocus || !focusRoot) return;
-
-        if (!focusRoot.isConnected) {
-            focusRoot = null;
-            scheduleWrite(clearClutter);
-            return;
-        }
-
-        const clutter = collectClutter(focusRoot);
-
-        scheduleWrite(function () {
-            focusRoot.classList.add(CLASS_MAIN);
-            for (let i = 0; i < clutter.length; i++) {
-                const node = clutter[i];
-                if (observedClutter.has(node)) continue;
-                observedClutter.add(node);
-                if (clutterObserver) clutterObserver.observe(node);
-            }
-        });
-    }
-
-    // =====================================================================
-    // Feature — panic key
-    // =====================================================================
-
-    function handleKeyDown(event) {
-        if (event.repeat) return;
-
-        if (event.key === 'Escape' && settings.panicEnabled &&
-            !event.ctrlKey && !event.metaKey && !event.altKey) {
-            panicOn = !panicOn;
-
-            if (panicOn) {
-                if (idleTimer !== null) { clearTimeout(idleTimer); idleTimer = null; }
-            } else {
-                lastMoveAt = performance.now();
-                armIdleTimer(settings.idleTimeout);
-            }
-
-            updateMediaPoll();
-            invalidateMediaGeometry();
-            scheduleWrite(function () { writeSize('instant'); });
-            return;
-        }
-
-        if (event.key === 'Alt' && settings.articleFocus) {
-            pickDepth = 0;
-            document.documentElement.classList.add(CLASS_PICKING);
-            bindWheel();
-        }
-    }
-
-    function handleKeyUp(event) {
-        if (event.key === 'Alt') clearPicker();
-    }
-
-    function handleWindowBlur() {
-        clearPicker();
-    }
-
-    // =====================================================================
-    // Combined scan
-    // =====================================================================
-
-    function runScan() {
-        scanHandle = null;
-        if (!isEnabled || !overlay) return;
         scanMedia();
-        refreshFocus();
+        requestGeometry();
     }
 
-    // =====================================================================
-    // DOM lifecycle
-    // =====================================================================
+    // Re-entering the top layer keeps page dialogs and popovers under the blur.
+    function showLayers() {
+        if (!mounted) return;
+        for (const node of [nodes.veil, nodes.ring, nodes.marquee, nodes.toast]) {
+            if (!node.isConnected) continue;
+            try {
+                if (node.matches(':popover-open')) node.hidePopover();
+                node.showPopover();
+            } catch {}
+        }
+    }
 
-    function createOverlay() {
-        if (overlay) return;
+    function onBeforeToggle(event) {
+        if (event.newState === 'open' && !isOwnNode(event.target)) queueMicrotask(showLayers);
+    }
 
-        const root = document.body || document.documentElement;
+    function onToggle(event) {
+        if (event.newState === 'closed' && isOwnNode(event.target) &&
+            !event.target.matches(':popover-open')) showLayers();
+    }
+
+    function onFullscreenChange() {
+        showLayers();
+        requestGeometry();
+    }
+
+    function isAttached() {
+        const root = document.documentElement;
+        return Boolean(root) && nodes.veil.parentNode === root && nodes.ring.parentNode === root &&
+            nodes.marquee.parentNode === root && nodes.toast.parentNode === root;
+    }
+
+    // Some pages keep deleting foreign nodes; don't get into an endless loop with them.
+    function reattachNow() {
+        const now = performance.now();
+        if (now - reattachWindow > 1000) {
+            reattachWindow = now;
+            reattachCount = 0;
+        }
+        if (++reattachCount > REATTACH_LIMIT) {
+            if (!rescanTimer) rescanTimer = setTimeout(rescan, RESCAN_THROTTLE_MS);
+            return;
+        }
+        attachNodes();
+    }
+
+    function attachNodes() {
+        const root = document.documentElement;
         if (!root) return;
+        root.append(nodes.veil, nodes.ring, nodes.marquee, nodes.toast);
+        showLayers();
+    }
 
-        overlay = document.createElement('div');
-        overlay.id = OVERLAY_ID;
-        overlay.classList.add(CLASS_IDLE);
+    function mount(animate) {
+        if (mounted || destroyed) return;
 
-        spotlight = document.createElement('div');
-        spotlight.id = SPOTLIGHT_ID;
-        spotlight.classList.add(CLASS_IDLE);
+        const veil = createNode(IDS.veil);
+        const ring = createNode(IDS.ring);
+        const marquee = createNode(IDS.marquee);
+        const toast = createNode(IDS.toast);
+        const marqueeLabel = document.createElement('span');
 
-        picker = document.createElement('div');
-        picker.id = PICKER_ID;
-        pickerLabel = document.createElement('span');
-        pickerLabel.className = 'sb-pick-label';
-        picker.appendChild(pickerLabel);
-        root.appendChild(overlay);
-        root.appendChild(spotlight);
-        root.appendChild(picker);
+        marqueeLabel.className = 'sb-label';
+        marqueeLabel.dir = 'auto';
+        marquee.appendChild(marqueeLabel);
+        toast.dir = 'auto';
+        veil.dir = t('textDirection') || 'ltr';
+        veil.dataset.hint = t('panicOverlayHint');
+        if (animate) {
+            veil.classList.add('sb-enter');
+            veil.addEventListener('animationend', function () {
+                veil.classList.remove('sb-enter');
+            }, { once: true });
+        }
 
-        writeSize('instant');
+        nodes = { veil, ring, marquee, marqueeLabel, toast };
+        mounted = true;
+        attachNodes();
+        lastMaskPosition = '';
+        lastMaskSize = '';
 
-        document.addEventListener('mousemove', handleMouseMove, { passive: true });
-        document.addEventListener('mouseleave', handleMouseLeave);
-        document.addEventListener('mouseenter', handleMouseEnter);
-        document.addEventListener('scroll', invalidateMediaGeometry, { passive: true, capture: true });
-        window.addEventListener('resize', invalidateMediaGeometry, { passive: true });
-        document.addEventListener('fullscreenchange', invalidateMediaGeometry);
-        window.addEventListener('click', handlePickClick, true);
-        window.addEventListener('mousedown', handlePickClick, true);
-        window.addEventListener('mouseup', handlePickClick, true);
+        window.addEventListener('pointermove', onPointerMove, PASSIVE_CAPTURE);
+        window.addEventListener('pointerout', onPointerOut, PASSIVE_CAPTURE);
+        window.addEventListener('dragover', onDragOver, PASSIVE_CAPTURE);
+        window.addEventListener('pointerdown', markActivity, PASSIVE_CAPTURE);
+        window.addEventListener('wheel', markActivity, PASSIVE_CAPTURE);
+        window.addEventListener('keydown', onKeyDown, true);
+        window.addEventListener('keyup', onKeyUp, true);
+        window.addEventListener('blur', stopPicking);
 
-        window.addEventListener('keydown', handleKeyDown, true);
-        window.addEventListener('keyup', handleKeyUp, true);
-        window.addEventListener('blur', handleWindowBlur);
+        window.addEventListener('pointerdown', onPickPointer, true);
+        window.addEventListener('mousedown', onPickPointer, true);
+        window.addEventListener('mouseup', onPickPointer, true);
+        window.addEventListener('click', onPickPointer, true);
 
-        mediaObserver = new IntersectionObserver(handleMediaIntersect, {
-            rootMargin: IO_ROOT_MARGIN,
+        window.addEventListener('scroll', requestGeometry, PASSIVE_CAPTURE);
+        window.addEventListener('resize', requestGeometry, { passive: true });
+        document.addEventListener('fullscreenchange', onFullscreenChange);
+        window.addEventListener('beforetoggle', onBeforeToggle, true);
+        window.addEventListener('toggle', onToggle, true);
+
+        mediaObserver = new IntersectionObserver(onMediaIntersect, {
+            rootMargin: '150px',
             threshold: [0, 0.25, 0.5, 0.75, 1]
         });
-
-        if (typeof ResizeObserver === 'function') {
-            mediaResizeObserver = new ResizeObserver(invalidateMediaGeometry);
-        }
-
-        clutterObserver = new IntersectionObserver(handleClutterIntersect, {
-            rootMargin: IO_ROOT_MARGIN
+        resizeObserver = new ResizeObserver(function () { requestGeometry(); });
+        domObserver = new MutationObserver(onDomMutations);
+        domObserver.observe(document, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['src', 'open']
         });
 
-        lastMoveAt = performance.now();
-        armIdleTimer(settings.idleTimeout);
-
-        startDomObserver();
-        scheduleScan(runScan);
+        scanMedia();
+        lastActivity = performance.now();
+        armIdle(settings.idleTimeout);
+        requestShape('instant');
+        requestGeometry();
     }
 
-    function removeOverlay() {
-        if (!overlay) return;
+    function unmount() {
+        if (!mounted) return;
+        mounted = false;
 
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseleave', handleMouseLeave);
-        document.removeEventListener('mouseenter', handleMouseEnter);
-        document.removeEventListener('scroll', invalidateMediaGeometry, { capture: true });
-        window.removeEventListener('resize', invalidateMediaGeometry);
-        document.removeEventListener('fullscreenchange', invalidateMediaGeometry);
+        window.removeEventListener('pointermove', onPointerMove, PASSIVE_CAPTURE);
+        window.removeEventListener('pointerout', onPointerOut, PASSIVE_CAPTURE);
+        window.removeEventListener('dragover', onDragOver, PASSIVE_CAPTURE);
+        window.removeEventListener('pointerdown', markActivity, PASSIVE_CAPTURE);
+        window.removeEventListener('wheel', markActivity, PASSIVE_CAPTURE);
+        window.removeEventListener('keydown', onKeyDown, true);
+        window.removeEventListener('keyup', onKeyUp, true);
+        window.removeEventListener('blur', stopPicking);
+        window.removeEventListener('pointerdown', onPickPointer, true);
+        window.removeEventListener('mousedown', onPickPointer, true);
+        window.removeEventListener('mouseup', onPickPointer, true);
+        window.removeEventListener('click', onPickPointer, true);
+        window.removeEventListener('scroll', requestGeometry, PASSIVE_CAPTURE);
+        window.removeEventListener('resize', requestGeometry, { passive: true });
+        document.removeEventListener('fullscreenchange', onFullscreenChange);
+        window.removeEventListener('beforetoggle', onBeforeToggle, true);
+        window.removeEventListener('toggle', onToggle, true);
 
-        window.removeEventListener('click', handlePickClick, true);
-        window.removeEventListener('mousedown', handlePickClick, true);
-        window.removeEventListener('mouseup', handlePickClick, true);
-        window.removeEventListener('keydown', handleKeyDown, true);
-        window.removeEventListener('keyup', handleKeyUp, true);
-        window.removeEventListener('blur', handleWindowBlur);
-        unbindWheel();
+        stopPicking();
 
-        stopDomObserver();
-        cancelScan();
-
-        if (frameRafId !== null) { cancelAnimationFrame(frameRafId); frameRafId = null; }
-        if (mutateRafId !== null) { cancelAnimationFrame(mutateRafId); mutateRafId = null; }
-        writeQueue.length = 0;
-
-        if (idleTimer !== null) { clearTimeout(idleTimer); idleTimer = null; }
-        if (mediaPollTimer !== null) { window.clearInterval(mediaPollTimer); mediaPollTimer = null; }
-        if (mediaObserver) { mediaObserver.disconnect(); mediaObserver = null; }
-        if (mediaResizeObserver) { mediaResizeObserver.disconnect(); mediaResizeObserver = null; }
-        if (clutterObserver) { clutterObserver.disconnect(); clutterObserver = null; }
-
-        visibleMedia.clear();
-        for (let i = 0; i < MEDIA_SLOTS; i++) slotCache[i] = null;
-
-        clearClutter();
-        focusRoot = null;
-        pickTarget = null;
-        pickShown = false;
-        autoBlurred = false;
-        document.documentElement.classList.remove(CLASS_PICKING);
-
-        overlay.remove();
-        if (spotlight) spotlight.remove();
-        if (picker) picker.remove();
-        overlay = null;
-        spotlight = null;
-        picker = null;
-        pickerLabel = null;
-    }
-
-    // =====================================================================
-    // Debounced MutationObserver
-    // =====================================================================
-    function startDomObserver() {
-        if (domObserver) return;
-
-        domObserver = new MutationObserver(function (mutations) {
-            let relevant = false;
-
-            for (let i = 0; i < mutations.length; i++) {
-                const m = mutations[i];
-                if (isOwnNode(m.target)) continue;
-
-                let selfOnly = m.addedNodes.length > 0;
-                for (let j = 0; j < m.addedNodes.length; j++) {
-                    if (!isOwnNode(m.addedNodes[j])) { selfOnly = false; break; }
-                }
-                if (selfOnly) continue;
-
-                relevant = true;
-                break;
-            }
-            if (!relevant) return;
-
-            if (domDebounceTimer !== null) clearTimeout(domDebounceTimer);
-            domDebounceTimer = setTimeout(function () {
-                domDebounceTimer = null;
-
-                if (location.href !== lastUrl) {
-                    lastUrl = location.href;
-                    currentSite = new URL(location.href).hostname;
-                    focusRoot = null;
-                    scheduleWrite(clearClutter);
-                    refreshFromStorage();
-                }
-
-                scheduleScan(runScan);
-            }, MUTATION_DEBOUNCE_MS);
-        });
-
-        domObserver.observe(document.documentElement, { childList: true, subtree: true });
-    }
-
-    function stopDomObserver() {
-        if (domDebounceTimer !== null) { clearTimeout(domDebounceTimer); domDebounceTimer = null; }
-        if (domObserver) { domObserver.disconnect(); domObserver = null; }
-    }
-
-    // =====================================================================
-    // Enable / disable
-    // =====================================================================
-
-    function updateEffect(globalEnabled, disabledSites) {
-        const shouldBeEnabled = globalEnabled && !disabledSites.includes(currentSite);
-
-        if (shouldBeEnabled && !isEnabled) {
-            isEnabled = true;
-            createOverlay();
-        } else if (!shouldBeEnabled && isEnabled) {
-            isEnabled = false;
-            removeOverlay();
-        }
-    }
-
-    function refreshFromStorage() {
-        chrome.storage.local.get(['globalEnabled', 'disabledSites'], function (data) {
-            updateEffect(data.globalEnabled !== false, data.disabledSites || []);
-        });
-    }
-
-    // =====================================================================
-    // Boot
-    // =====================================================================
-
-    chrome.storage.local.get(
-        ['globalEnabled', 'disabledSites', 'spotlightSize', 'blurVideos',
-         'articleFocus', 'idleTimeout', 'panicEnabled'],
-        function (data) {
-            settings.spotlightSize = clampSize(data.spotlightSize);
-            settings.blurVideos = data.blurVideos === true;
-            settings.articleFocus = data.articleFocus === true;
-            settings.idleTimeout = clampIdle(
-                data.idleTimeout === undefined ? DEFAULT_IDLE_TIMEOUT : data.idleTimeout);
-            settings.panicEnabled = data.panicEnabled !== false;
-
-            const globalEnabled = data.globalEnabled !== false;
-            const disabledSites = data.disabledSites || [];
-
-            isEnabled = globalEnabled && !disabledSites.includes(currentSite);
-            if (isEnabled) createOverlay();
-        }
-    );
-
-    // =====================================================================
-    // Messaging
-    // =====================================================================
-
-    chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
-        if (request.action === 'updateEffect') {
-            if (request.globalEnabled === undefined && request.disabledSites === undefined) {
-                refreshFromStorage();
-            } else {
-                updateEffect(
-                    request.globalEnabled !== undefined ? request.globalEnabled : true,
-                    request.disabledSites || []
-                );
-            }
-            sendResponse({ success: true });
-        }
-        return true;
-    });
-
-    // =====================================================================
-    // Storage changes
-    // =====================================================================
-
-    chrome.storage.onChanged.addListener(function (changes, namespace) {
-        if (namespace !== 'local') return;
-
-        if (changes.spotlightSize) {
-            settings.spotlightSize = clampSize(changes.spotlightSize.newValue);
-            scheduleWrite(function () { writeSize('normal'); });
-        }
-
-        if (changes.blurVideos) {
-            settings.blurVideos = changes.blurVideos.newValue === true;
-            updateMediaPoll();
-            invalidateMediaGeometry();
-        }
-
-        if (changes.articleFocus) {
-            settings.articleFocus = changes.articleFocus.newValue === true;
-
-            if (!settings.articleFocus) {
-                focusRoot = null;
-                clearPicker();
-                scheduleWrite(clearClutter);
-            }
-        }
-
-        if (changes.idleTimeout) {
-            settings.idleTimeout = clampIdle(changes.idleTimeout.newValue);
-
-            cancelIdleBlur();
-            lastMoveAt = performance.now();
-            if (!panicOn) armIdleTimer(settings.idleTimeout);
-        }
-
-        if (changes.panicEnabled) {
-            settings.panicEnabled = changes.panicEnabled.newValue !== false;
-
-            if (!settings.panicEnabled && panicOn) {
-                panicOn = false;
-                lastMoveAt = performance.now();
-                armIdleTimer(settings.idleTimeout);
-                updateMediaPoll();
-                invalidateMediaGeometry();
-                scheduleWrite(function () { writeSize('instant'); });
-            }
-        }
-
-        if (changes.globalEnabled || changes.disabledSites) {
-            refreshFromStorage();
-        }
-    });
-
-    // =====================================================================
-    // Teardown
-    // =====================================================================
-
-    window.addEventListener('pagehide', function () {
-        stopDomObserver();
-        cancelScan();
-        if (idleTimer !== null) { clearTimeout(idleTimer); idleTimer = null; }
-        if (mediaPollTimer !== null) { window.clearInterval(mediaPollTimer); mediaPollTimer = null; }
-        unbindWheel();
         if (mediaObserver) mediaObserver.disconnect();
-        if (mediaResizeObserver) mediaResizeObserver.disconnect();
-        if (clutterObserver) clutterObserver.disconnect();
-    }, { once: true });
+        if (resizeObserver) resizeObserver.disconnect();
+        if (domObserver) domObserver.disconnect();
+        mediaObserver = resizeObserver = domObserver = null;
+        visibleMedia.clear();
+        observedMedia = new WeakSet();
+
+        if (frameId) cancelAnimationFrame(frameId);
+        clearTimeout(idleTimer);
+        clearTimeout(rescanTimer);
+        clearTimeout(toastTimer);
+        clearInterval(pollTimer);
+        frameId = idleTimer = rescanTimer = toastTimer = pollTimer = 0;
+        dirty.pointer = dirty.shape = dirty.geometry = dirty.pick = false;
+
+        focusRoot = null;
+        focusPage = '';
+        panicOn = false;
+        autoBlurred = false;
+        pointer.inside = false;
+        pick.shown = false;
+
+        nodes.veil.remove();
+        nodes.ring.remove();
+        nodes.marquee.remove();
+        nodes.toast.remove();
+        nodes = null;
+    }
+
+    function applySettings(next, animate) {
+        const prev = settings;
+        settings = next;
+
+        if (!Settings.isActiveOn(next, site)) {
+            unmount();
+            return;
+        }
+        if (!mounted) {
+            mount(animate);
+            return;
+        }
+
+        if (prev.spotlightSize !== next.spotlightSize || prev.blurStrength !== next.blurStrength) {
+            requestShape('normal');
+        }
+
+        if (prev.keepVideosClear !== next.keepVideosClear) {
+            updatePoll();
+            requestGeometry();
+        }
+
+        if (prev.articleFocus && !next.articleFocus) {
+            stopPicking();
+            setFocus(null, true);
+        }
+
+        if (prev.idleTimeout !== next.idleTimeout) {
+            clearTimeout(idleTimer);
+            idleTimer = 0;
+            if (autoBlurred) {
+                autoBlurred = false;
+                requestShape('instant');
+                requestGeometry();
+            }
+            lastActivity = performance.now();
+            if (!panicOn) armIdle(next.idleTimeout);
+        }
+
+        if (!next.panicEnabled && panicOn) setPanic(false);
+    }
+
+    async function syncFromStorage(animate) {
+        let next;
+        try {
+            next = await Settings.load();
+        } catch {
+            return;
+        }
+        if (destroyed) return;
+        loaded = true;
+        applySettings(next, animate);
+    }
+
+    function onStorageChanged(changes, area) {
+        if (area !== 'local' || destroyed) return;
+        if (!loaded) {
+            syncFromStorage(true);
+            return;
+        }
+        const patch = {};
+        let relevant = false;
+        for (const key of Settings.KEYS) {
+            if (key in changes) {
+                patch[key] = changes[key].newValue;
+                relevant = true;
+            }
+        }
+        if (relevant) applySettings(Settings.normalize(Object.assign({}, settings, patch)), true);
+    }
+
+    function onMessage(message, sender, sendResponse) {
+        if (!message) return;
+        if (message.type === 'smart-blur:status') {
+            sendResponse({ site, running: mounted });
+        } else if (message.type === 'smart-blur:frame-input' && mounted) {
+            markActivity();
+            if (message.key === 'Escape') handleEscapePress();
+        }
+    }
+
+    function onPageShow(event) {
+        if (event.persisted) syncFromStorage(false);
+    }
+
+    function destroy() {
+        if (destroyed) return;
+        destroyed = true;
+        unmount();
+        document.removeEventListener(TEARDOWN_EVENT, destroy);
+        window.removeEventListener('pageshow', onPageShow);
+        try {
+            chrome.storage.onChanged.removeListener(onStorageChanged);
+            chrome.runtime.onMessage.removeListener(onMessage);
+        } catch {}
+    }
+
+    function boot() {
+        const root = document.documentElement;
+        if (!root || root.namespaceURI !== XHTML_NS) return;
+
+        document.dispatchEvent(new CustomEvent(TEARDOWN_EVENT));
+        for (const id of STALE_IDS) {
+            const stale = document.getElementById(id);
+            if (stale) stale.remove();
+        }
+
+        document.addEventListener(TEARDOWN_EVENT, destroy);
+        window.addEventListener('pageshow', onPageShow);
+        chrome.storage.onChanged.addListener(onStorageChanged);
+        chrome.runtime.onMessage.addListener(onMessage);
+        syncFromStorage(false);
+    }
+
+    if (document.documentElement) {
+        boot();
+    } else {
+        document.addEventListener('readystatechange', boot, { once: true });
+    }
 })();
