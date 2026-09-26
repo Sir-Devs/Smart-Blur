@@ -1,0 +1,242 @@
+{
+  "extName": {
+    "message": "Smart Blur"
+  },
+  "extDescription": {
+    "message": "Blurs your screen for privacy and keeps a clear spotlight that follows your mouse."
+  },
+  "commandToggle": {
+    "message": "Turn Smart Blur on or off everywhere"
+  },
+  "textDirection": {
+    "message": "ltr"
+  },
+  "langCode": {
+    "message": "en"
+  },
+  "statusLoading": {
+    "message": "Checking this page…"
+  },
+  "masterAria": {
+    "message": "Smart Blur on all websites"
+  },
+  "statusActive": {
+    "message": "Protecting $SITE$",
+    "placeholders": {
+      "site": {
+        "content": "$1",
+        "example": "example.com"
+      }
+    }
+  },
+  "statusPaused": {
+    "message": "Paused on $SITE$",
+    "placeholders": {
+      "site": {
+        "content": "$1",
+        "example": "example.com"
+      }
+    }
+  },
+  "statusOff": {
+    "message": "Off on all websites"
+  },
+  "statusUnavailable": {
+    "message": "Not available on this page"
+  },
+  "hintActive": {
+    "message": "Readable only around your cursor."
+  },
+  "hintPaused": {
+    "message": "This site is shown without blur."
+  },
+  "hintOff": {
+    "message": "Turn it on with the switch above."
+  },
+  "hintUnavailable": {
+    "message": "Chrome protects its own pages and the Web Store. If this page was open before installing, reload it."
+  },
+  "localFiles": {
+    "message": "local files"
+  },
+  "pauseSite": {
+    "message": "Pause here"
+  },
+  "resumeSite": {
+    "message": "Resume here"
+  },
+  "sectionSpotlight": {
+    "message": "Spotlight"
+  },
+  "spotlightSize": {
+    "message": "Spotlight size"
+  },
+  "blurStrength": {
+    "message": "Blur strength"
+  },
+  "sectionFeatures": {
+    "message": "Features"
+  },
+  "videosTitle": {
+    "message": "Keep videos clear"
+  },
+  "videosHint": {
+    "message": "Videos stay sharp while the page is blurred."
+  },
+  "focusTitle": {
+    "message": "Article Focus"
+  },
+  "focusHint": {
+    "message": "Pin one part of the page clear, blur the rest."
+  },
+  "focusKeyMove": {
+    "message": "$KEY$ + move",
+    "placeholders": {
+      "key": {
+        "content": "$1",
+        "example": "Alt"
+      }
+    }
+  },
+  "focusStepMove": {
+    "message": "highlight"
+  },
+  "focusKeyScroll": {
+    "message": "$KEY$ + scroll",
+    "placeholders": {
+      "key": {
+        "content": "$1",
+        "example": "Alt"
+      }
+    }
+  },
+  "focusStepScroll": {
+    "message": "resize"
+  },
+  "focusKeyClick": {
+    "message": "$KEY$ + click",
+    "placeholders": {
+      "key": {
+        "content": "$1",
+        "example": "Alt"
+      }
+    }
+  },
+  "focusStepClick": {
+    "message": "pin / release"
+  },
+  "idleTitle": {
+    "message": "Auto-blur when idle"
+  },
+  "idleHint": {
+    "message": "Closes the spotlight when you step away."
+  },
+  "idleOff": {
+    "message": "Off"
+  },
+  "idleSeconds": {
+    "message": "$N$s",
+    "placeholders": {
+      "n": {
+        "content": "$1",
+        "example": "15"
+      }
+    }
+  },
+  "panicTitle": {
+    "message": "Panic key"
+  },
+  "panicHint": {
+    "message": "Press Esc twice to cover or uncover the screen."
+  },
+  "pausedSites": {
+    "message": "Paused sites"
+  },
+  "resume": {
+    "message": "Resume"
+  },
+  "resumeAria": {
+    "message": "Resume on $SITE$",
+    "placeholders": {
+      "site": {
+        "content": "$1",
+        "example": "example.com"
+      }
+    }
+  },
+  "shortcutLabel": {
+    "message": "on/off"
+  },
+  "shortcutNotSet": {
+    "message": "no shortcut"
+  },
+  "shortcutChange": {
+    "message": "Change"
+  },
+  "footerMadeBy": {
+    "message": "Made by Ahmad Alhalabi"
+  },
+  "panicOverlayHint": {
+    "message": "Smart Blur · Press Esc twice to show the page"
+  },
+  "pickArticle": {
+    "message": "Article"
+  },
+  "pickMain": {
+    "message": "Main content"
+  },
+  "pickSection": {
+    "message": "Section"
+  },
+  "pickParagraph": {
+    "message": "Paragraph"
+  },
+  "pickHeading": {
+    "message": "Heading"
+  },
+  "pickList": {
+    "message": "List"
+  },
+  "pickTable": {
+    "message": "Table"
+  },
+  "pickImage": {
+    "message": "Image"
+  },
+  "pickVideo": {
+    "message": "Video"
+  },
+  "pickNavigation": {
+    "message": "Navigation"
+  },
+  "pickHeader": {
+    "message": "Header"
+  },
+  "pickFooter": {
+    "message": "Footer"
+  },
+  "pickSidebar": {
+    "message": "Sidebar"
+  },
+  "pickForm": {
+    "message": "Form"
+  },
+  "pickBlock": {
+    "message": "Block"
+  },
+  "pickHint": {
+    "message": "scroll to resize · click to pin"
+  },
+  "toastLocked": {
+    "message": "Focus pinned · $KEY$ + click anywhere to release",
+    "placeholders": {
+      "key": {
+        "content": "$1",
+        "example": "Alt"
+      }
+    }
+  },
+  "toastReleased": {
+    "message": "Focus released"
+  }
+}

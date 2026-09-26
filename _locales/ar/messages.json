@@ -1,0 +1,242 @@
+{
+  "extName": {
+    "message": "Smart Blur"
+  },
+  "extDescription": {
+    "message": "يضبّب الشاشة لحماية خصوصيتك ويُبقي دائرة واضحة تتبع مؤشر الماوس."
+  },
+  "commandToggle": {
+    "message": "تشغيل Smart Blur أو إيقافه في كل المواقع"
+  },
+  "textDirection": {
+    "message": "rtl"
+  },
+  "langCode": {
+    "message": "ar"
+  },
+  "statusLoading": {
+    "message": "جارٍ فحص الصفحة…"
+  },
+  "masterAria": {
+    "message": "تشغيل Smart Blur على كل المواقع"
+  },
+  "statusActive": {
+    "message": "الحماية مفعّلة على $SITE$",
+    "placeholders": {
+      "site": {
+        "content": "$1",
+        "example": "example.com"
+      }
+    }
+  },
+  "statusPaused": {
+    "message": "متوقف مؤقتاً على $SITE$",
+    "placeholders": {
+      "site": {
+        "content": "$1",
+        "example": "example.com"
+      }
+    }
+  },
+  "statusOff": {
+    "message": "متوقف على كل المواقع"
+  },
+  "statusUnavailable": {
+    "message": "غير متاح في هذه الصفحة"
+  },
+  "hintActive": {
+    "message": "لا يظهر بوضوح إلا ما حول المؤشر."
+  },
+  "hintPaused": {
+    "message": "هذا الموقع يظهر دون تضبيب."
+  },
+  "hintOff": {
+    "message": "شغّله من المفتاح في الأعلى."
+  },
+  "hintUnavailable": {
+    "message": "يحمي Chrome صفحاته الخاصة ومتجر الإضافات. إذا كانت هذه الصفحة مفتوحة قبل التثبيت فأعد تحميلها."
+  },
+  "localFiles": {
+    "message": "الملفات المحلية"
+  },
+  "pauseSite": {
+    "message": "إيقاف هنا"
+  },
+  "resumeSite": {
+    "message": "تشغيل هنا"
+  },
+  "sectionSpotlight": {
+    "message": "بقعة الرؤية"
+  },
+  "spotlightSize": {
+    "message": "حجم بقعة الرؤية"
+  },
+  "blurStrength": {
+    "message": "قوة التضبيب"
+  },
+  "sectionFeatures": {
+    "message": "المزايا"
+  },
+  "videosTitle": {
+    "message": "إبقاء الفيديو واضحاً"
+  },
+  "videosHint": {
+    "message": "يبقى الفيديو واضحاً وبقية الصفحة مضبّبة."
+  },
+  "focusTitle": {
+    "message": "التركيز على المقال"
+  },
+  "focusHint": {
+    "message": "ثبّت جزءاً من الصفحة واضحاً وضبّب الباقي."
+  },
+  "focusKeyMove": {
+    "message": "$KEY$ + تحريك",
+    "placeholders": {
+      "key": {
+        "content": "$1",
+        "example": "Alt"
+      }
+    }
+  },
+  "focusStepMove": {
+    "message": "تحديد منطقة"
+  },
+  "focusKeyScroll": {
+    "message": "$KEY$ + العجلة",
+    "placeholders": {
+      "key": {
+        "content": "$1",
+        "example": "Alt"
+      }
+    }
+  },
+  "focusStepScroll": {
+    "message": "تغيير الحجم"
+  },
+  "focusKeyClick": {
+    "message": "$KEY$ + نقر",
+    "placeholders": {
+      "key": {
+        "content": "$1",
+        "example": "Alt"
+      }
+    }
+  },
+  "focusStepClick": {
+    "message": "تثبيت / إلغاء"
+  },
+  "idleTitle": {
+    "message": "تضبيب عند الخمول"
+  },
+  "idleHint": {
+    "message": "يغلق بقعة الرؤية عند ابتعادك."
+  },
+  "idleOff": {
+    "message": "إيقاف"
+  },
+  "idleSeconds": {
+    "message": "$N$ ث",
+    "placeholders": {
+      "n": {
+        "content": "$1",
+        "example": "15"
+      }
+    }
+  },
+  "panicTitle": {
+    "message": "زر الطوارئ"
+  },
+  "panicHint": {
+    "message": "اضغط Esc مرتين لتغطية الشاشة أو إظهارها."
+  },
+  "pausedSites": {
+    "message": "المواقع المتوقفة"
+  },
+  "resume": {
+    "message": "تشغيل"
+  },
+  "resumeAria": {
+    "message": "تشغيل على $SITE$",
+    "placeholders": {
+      "site": {
+        "content": "$1",
+        "example": "example.com"
+      }
+    }
+  },
+  "shortcutLabel": {
+    "message": "تشغيل/إيقاف"
+  },
+  "shortcutNotSet": {
+    "message": "بلا اختصار"
+  },
+  "shortcutChange": {
+    "message": "تغيير"
+  },
+  "footerMadeBy": {
+    "message": "تطوير أحمد الحلبي"
+  },
+  "panicOverlayHint": {
+    "message": "Smart Blur · اضغط Esc مرتين لإظهار الصفحة"
+  },
+  "pickArticle": {
+    "message": "مقال"
+  },
+  "pickMain": {
+    "message": "المحتوى الرئيسي"
+  },
+  "pickSection": {
+    "message": "قسم"
+  },
+  "pickParagraph": {
+    "message": "فقرة"
+  },
+  "pickHeading": {
+    "message": "عنوان"
+  },
+  "pickList": {
+    "message": "قائمة"
+  },
+  "pickTable": {
+    "message": "جدول"
+  },
+  "pickImage": {
+    "message": "صورة"
+  },
+  "pickVideo": {
+    "message": "فيديو"
+  },
+  "pickNavigation": {
+    "message": "شريط التنقل"
+  },
+  "pickHeader": {
+    "message": "الترويسة"
+  },
+  "pickFooter": {
+    "message": "التذييل"
+  },
+  "pickSidebar": {
+    "message": "شريط جانبي"
+  },
+  "pickForm": {
+    "message": "نموذج"
+  },
+  "pickBlock": {
+    "message": "كتلة"
+  },
+  "pickHint": {
+    "message": "العجلة لتغيير الحجم · انقر للتثبيت"
+  },
+  "toastLocked": {
+    "message": "تم تثبيت التركيز · $KEY$ + نقر في أي مكان للإلغاء",
+    "placeholders": {
+      "key": {
+        "content": "$1",
+        "example": "Alt"
+      }
+    }
+  },
+  "toastReleased": {
+    "message": "تم إلغاء التركيز"
+  }
+}
