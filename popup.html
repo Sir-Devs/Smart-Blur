@@ -1,457 +1,147 @@
 <!DOCTYPE html>
-<!--
-  Developed by Ahmad Alhalabi — https://ahmadalhalabi.com/
-  Copyright (c) 2025-2026 Ahmad Alhalabi. All rights reserved.
-  Released under the MIT License. See LICENSE for details.
--->
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="color-scheme" content="dark">
   <title>Smart Blur</title>
-  <style>
-    :root {
-      --panel-bg: rgba(255, 255, 255, 0.10);
-      --panel-border: rgba(255, 255, 255, 0.20);
-      --divider: rgba(255, 255, 255, 0.15);
-      --accent: #4CAF50;
-    }
-
-    * { box-sizing: border-box; }
-
-    body {
-      width: 340px;
-      padding: 18px;
-      margin: 0;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-    }
-
-    /* ---- Header ---- */
-
-    .header {
-      text-align: center;
-      margin-bottom: 16px;
-      padding-bottom: 13px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.3);
-    }
-
-    .header h3 {
-      margin: 0;
-      font-size: 18px;
-      font-weight: 600;
-      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-    }
-
-    /* ---- Master buttons ---- */
-
-    .controls {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      margin-bottom: 14px;
-    }
-
-    button {
-      padding: 11px 18px;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-      font-weight: 600;
-      font-size: 14px;
-      color: white;
-      transition: transform 0.2s ease, box-shadow 0.2s ease;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-      position: relative;
-      overflow: hidden;
-    }
-
-    button::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: -100%;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-      transition: left 0.5s;
-    }
-
-    button:hover::before { left: 100%; }
-    button:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2); }
-    button:active { transform: translateY(0); }
-
-    #toggleGlobal { background: linear-gradient(135deg, #4CAF50, #45a049); }
-    #toggleGlobal.off { background: linear-gradient(135deg, #f44336, #da190b); }
-    #toggleCurrent { background: linear-gradient(135deg, #2196F3, #0b7dda); }
-    #toggleCurrent.off { background: linear-gradient(135deg, #ff9800, #e68900); }
-    button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
-
-    /* ---- Section scaffolding ---- */
-
-    .section {
-      background: var(--panel-bg);
-      border: 1px solid var(--panel-border);
-      border-radius: 10px;
-      padding: 12px 14px;
-      margin-bottom: 11px;
-    }
-
-    .section-title {
-      font-size: 10px;
-      font-weight: 700;
-      letter-spacing: 0.09em;
-      text-transform: uppercase;
-      opacity: 0.7;
-      margin-bottom: 10px;
-    }
-
-    .row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-    }
-
-    .row + .row {
-      margin-top: 12px;
-      padding-top: 12px;
-      border-top: 1px solid var(--divider);
-    }
-
-    .row-text { flex: 1; min-width: 0; }
-
-    .row-title {
-      font-size: 13px;
-      font-weight: 600;
-      display: block;
-    }
-
-    .row-hint {
-      font-size: 11px;
-      opacity: 0.75;
-      display: block;
-      margin-top: 3px;
-      line-height: 1.4;
-    }
-
-    /* ---- Spotlight slider ---- */
-
-    .slider-label {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      font-size: 13px;
-      font-weight: 600;
-      margin-bottom: 10px;
-    }
-
-    .slider-value {
-      font-variant-numeric: tabular-nums;
-      font-size: 12px;
-      opacity: 0.9;
-      background: rgba(0, 0, 0, 0.2);
-      padding: 2px 8px;
-      border-radius: 10px;
-    }
-
-    input[type="range"] {
-      -webkit-appearance: none;
-      appearance: none;
-      width: 100%;
-      height: 6px;
-      border-radius: 3px;
-      background: rgba(255, 255, 255, 0.3);
-      outline: none;
-      cursor: pointer;
-      margin: 0;
-    }
-
-    input[type="range"]::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      appearance: none;
-      width: 18px;
-      height: 18px;
-      border-radius: 50%;
-      background: white;
-      border: none;
-      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
-      transition: transform 0.15s ease;
-    }
-
-    input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.15); }
-    input[type="range"]:disabled { opacity: 0.45; cursor: not-allowed; }
-
-    .slider-scale {
-      display: flex;
-      justify-content: space-between;
-      font-size: 10px;
-      opacity: 0.7;
-      margin-top: 6px;
-    }
-
-    /* ---- Toggle switches ---- */
-
-    .switch {
-      position: relative;
-      flex-shrink: 0;
-      width: 44px;
-      height: 24px;
-    }
-
-    .switch input {
-      position: absolute;
-      opacity: 0;
-      width: 100%;
-      height: 100%;
-      margin: 0;
-      cursor: pointer;
-      z-index: 2;
-    }
-
-    .switch .track {
-      position: absolute;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.3);
-      border: 1px solid rgba(255, 255, 255, 0.25);
-      border-radius: 12px;
-      transition: background 0.25s ease, border-color 0.25s ease;
-      pointer-events: none;
-    }
-
-    .switch .track::after {
-      content: '';
-      position: absolute;
-      top: 2px;
-      left: 2px;
-      width: 18px;
-      height: 18px;
-      border-radius: 50%;
-      background: white;
-      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.35);
-      /* transform, not `left` — keeps the knob animation on the compositor. */
-      transition: transform 0.25s ease;
-    }
-
-    .switch input:checked + .track {
-      background: var(--accent);
-      border-color: rgba(255, 255, 255, 0.5);
-    }
-
-    .switch input:checked + .track::after { transform: translateX(20px); }
-    .switch input:focus-visible + .track { box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.45); }
-    .switch input:disabled { cursor: not-allowed; }
-    .switch input:disabled + .track { opacity: 0.45; }
-
-    /* ---- Select ---- */
-
-    select {
-      flex-shrink: 0;
-      min-width: 108px;
-      padding: 7px 10px;
-      font-family: inherit;
-      font-size: 12px;
-      font-weight: 600;
-      color: white;
-      background: rgba(0, 0, 0, 0.32);
-      border: 1px solid rgba(255, 255, 255, 0.28);
-      border-radius: 7px;
-      cursor: pointer;
-      outline: none;
-      transition: border-color 0.2s ease, background 0.2s ease;
-    }
-
-    select:hover { background: rgba(0, 0, 0, 0.42); }
-    select:focus-visible { border-color: rgba(255, 255, 255, 0.8); }
-    select:disabled { opacity: 0.45; cursor: not-allowed; }
-    select option { background: #4b3a78; color: white; }
-
-    /* ---- Instruction box ---- */
-
-    .howto {
-      margin-top: 11px;
-      padding: 10px 11px 10px 12px;
-      background: rgba(0, 0, 0, 0.22);
-      border-left: 3px solid #ffd166;
-      border-radius: 0 7px 7px 0;
-      font-size: 11.5px;
-      line-height: 1.55;
-    }
-
-    .howto-title {
-      display: block;
-      font-size: 10px;
-      font-weight: 700;
-      letter-spacing: 0.07em;
-      text-transform: uppercase;
-      color: #ffd166;
-      margin-bottom: 5px;
-    }
-
-    .keys {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 5px;
-      margin-bottom: 7px;
-    }
-
-    kbd {
-      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      font-size: 10px;
-      font-weight: 600;
-      padding: 2px 6px;
-      border-radius: 4px;
-      background: rgba(255, 255, 255, 0.16);
-      border: 1px solid rgba(255, 255, 255, 0.28);
-      border-bottom-width: 2px;
-      white-space: nowrap;
-    }
-
-    /* ---- Status ---- */
-
-    .status {
-      margin-top: 14px;
-      padding: 11px;
-      border-radius: 8px;
-      text-align: center;
-      font-size: 13px;
-      font-weight: 600;
-      backdrop-filter: blur(10px);
-      background: var(--panel-bg);
-      border: 1px solid var(--panel-border);
-      transition: background 0.3s ease, box-shadow 0.3s ease;
-    }
-
-    .status.active {
-      background: rgba(76, 175, 80, 0.2);
-      border-color: rgba(76, 175, 80, 0.4);
-      box-shadow: 0 0 20px rgba(76, 175, 80, 0.3);
-    }
-
-    .status.inactive {
-      background: rgba(244, 67, 54, 0.2);
-      border-color: rgba(244, 67, 54, 0.4);
-      box-shadow: 0 0 20px rgba(244, 67, 54, 0.3);
-    }
-
-    .info {
-      font-size: 11px;
-      text-align: center;
-      margin-top: 13px;
-      opacity: 0.8;
-      font-style: italic;
-    }
-  </style>
+  <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-  <div class="header">
-    <h3>🧿 Smart Blur</h3>
-  </div>
+  <main class="app">
 
-  <div class="controls">
-    <button id="toggleGlobal" type="button">Turn Off Everywhere</button>
-    <button id="toggleCurrent" type="button">Disable On This Site</button>
-  </div>
-
-  <!-- ============================ Spotlight ============================ -->
-  <div class="section">
-    <div class="section-title">Spotlight</div>
-
-    <label class="slider-label" for="spotlightSize">
-      <span>Size</span>
-      <span class="slider-value" id="spotlightSizeValue">170 px</span>
-    </label>
-    <input
-      type="range"
-      id="spotlightSize"
-      name="spotlightSize"
-      min="60"
-      max="400"
-      step="10"
-      value="170"
-      aria-describedby="spotlightSizeValue">
-    <div class="slider-scale">
-      <span>Small</span>
-      <span>Large</span>
-    </div>
-  </div>
-
-  <!-- ============================= Content ============================= -->
-  <div class="section">
-    <div class="section-title">Content</div>
-
-    <div class="row">
-      <span class="row-text">
-        <label class="row-title" for="blurVideos">Blur Videos</label>
-        <span class="row-hint" id="blurVideosHint">
-          Off: video players stay sharp so you can keep watching.
-        </span>
-      </span>
-      <span class="switch">
-        <input type="checkbox" id="blurVideos" aria-describedby="blurVideosHint">
-        <span class="track"></span>
-      </span>
-    </div>
-
-    <div class="row">
-      <span class="row-text">
-        <label class="row-title" for="articleFocus">Article Focus</label>
-        <span class="row-hint">
-          Pick any region of the page by hand and keep only that clear.
-        </span>
-      </span>
-      <span class="switch">
-        <input type="checkbox" id="articleFocus" aria-describedby="articleFocusHowto">
-        <span class="track"></span>
-      </span>
-    </div>
-
-    <div class="howto" id="articleFocusHowto">
-      <span class="howto-title">How to use</span>
-      <div class="keys">
-        <kbd>Alt</kbd><kbd>Alt + Wheel</kbd><kbd>Alt + Click</kbd>
+    <header class="top">
+      <img class="logo" src="icon128.png" alt="" width="38" height="38">
+      <div class="brand">
+        <h1>Smart Blur</h1>
+        <div class="meta">
+          <span id="version"></span>
+          <span class="sep" aria-hidden="true">·</span>
+          <kbd id="shortcutKeys"></kbd>
+          <span data-i18n="shortcutLabel"></span>
+          <button type="button" class="link" id="shortcutChange" data-i18n="shortcutChange"></button>
+        </div>
       </div>
-      <span id="articleFocusInstructions">Hold Alt and hover to pick a region, Alt+wheel to widen, Alt+click to lock. Everything around it stays blurred. Alt+click again to release.</span>
-    </div>
-  </div>
+      <label class="switch switch-lg">
+        <input type="checkbox" id="globalEnabled" role="switch" data-i18n-aria="masterAria">
+        <span class="track" aria-hidden="true"></span>
+      </label>
+    </header>
 
-  <!-- ============================= Privacy ============================= -->
-  <div class="section">
-    <div class="section-title">Privacy</div>
+    <section class="site" id="siteCard" data-state="loading" aria-live="polite">
+      <span class="site-dot" aria-hidden="true"></span>
+      <div class="site-text">
+        <p class="site-title" id="siteTitle">&nbsp;</p>
+        <p class="site-hint" id="siteHint"></p>
+      </div>
+      <button type="button" class="btn" id="siteToggle" hidden></button>
+    </section>
 
-    <div class="row">
-      <span class="row-text">
-        <label class="row-title" for="idleTimeout">Idle Auto-Blur</label>
-        <span class="row-hint" id="idleTimeoutHint">
-          Blurs the whole screen after the mouse sits still.
+    <section class="card sliders" data-i18n-aria="sectionSpotlight">
+      <div class="slider">
+        <div class="slider-head">
+          <label for="spotlightSize" data-i18n="spotlightSize"></label>
+          <output id="spotlightSizeValue" for="spotlightSize"></output>
+        </div>
+        <input type="range" id="spotlightSize" data-key="spotlightSize">
+      </div>
+
+      <div class="slider">
+        <div class="slider-head">
+          <label for="blurStrength" data-i18n="blurStrength"></label>
+          <output id="blurStrengthValue" for="blurStrength"></output>
+        </div>
+        <input type="range" id="blurStrength" data-key="blurStrength">
+      </div>
+    </section>
+
+    <section class="card features" data-i18n-aria="sectionFeatures">
+
+      <div class="row">
+        <svg class="row-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="3" y="5" width="18" height="14" rx="3"/>
+          <path d="M10 9.3v5.4l4.6-2.7z" fill="currentColor" stroke="none"/>
+        </svg>
+        <div class="row-text">
+          <label class="row-title" for="keepVideosClear" data-i18n="videosTitle"></label>
+          <span class="row-hint" data-i18n="videosHint"></span>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="keepVideosClear" role="switch" data-key="keepVideosClear">
+          <span class="track" aria-hidden="true"></span>
+        </label>
+      </div>
+
+      <div class="row">
+        <svg class="row-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 8.5V5.5A1.5 1.5 0 0 1 5.5 4h3M15.5 4h3A1.5 1.5 0 0 1 20 5.5v3M20 15.5v3a1.5 1.5 0 0 1-1.5 1.5h-3M8.5 20h-3A1.5 1.5 0 0 1 4 18.5v-3"/>
+          <rect x="8.5" y="8.5" width="7" height="7" rx="1.5"/>
+        </svg>
+        <div class="row-text">
+          <label class="row-title" for="articleFocus" data-i18n="focusTitle"></label>
+          <span class="row-hint" data-i18n="focusHint"></span>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="articleFocus" role="switch" data-key="articleFocus" aria-controls="focusHowto">
+          <span class="track" aria-hidden="true"></span>
+        </label>
+      </div>
+
+      <ol class="howto" id="focusHowto" hidden>
+        <li><kbd data-i18n="focusKeyMove"></kbd><span data-i18n="focusStepMove"></span></li>
+        <li><kbd data-i18n="focusKeyScroll"></kbd><span data-i18n="focusStepScroll"></span></li>
+        <li><kbd data-i18n="focusKeyClick"></kbd><span data-i18n="focusStepClick"></span></li>
+      </ol>
+
+      <div class="row">
+        <svg class="row-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="8.5"/>
+          <path d="M12 7.5V12l3 2"/>
+        </svg>
+        <div class="row-text">
+          <span class="row-title" id="idleTitle" data-i18n="idleTitle"></span>
+          <span class="row-hint" data-i18n="idleHint"></span>
+        </div>
+        <div class="segmented" id="idleTimeout" role="radiogroup" aria-labelledby="idleTitle"></div>
+      </div>
+
+      <div class="row">
+        <svg class="row-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M3.5 3.5l17 17"/>
+          <path d="M10.4 5.2A9.6 9.6 0 0 1 12 5c5 0 8.4 4.3 9.3 7a12.6 12.6 0 0 1-2.6 3.7M6.5 6.6A12.6 12.6 0 0 0 2.7 12c.9 2.7 4.3 7 9.3 7a9.7 9.7 0 0 0 5.4-1.6"/>
+          <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/>
+        </svg>
+        <div class="row-text">
+          <label class="row-title" for="panicEnabled" data-i18n="panicTitle"></label>
+          <span class="row-hint" data-i18n="panicHint"></span>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="panicEnabled" role="switch" data-key="panicEnabled">
+          <span class="track" aria-hidden="true"></span>
+        </label>
+      </div>
+    </section>
+
+    <details class="card paused" id="pausedBox" hidden>
+      <summary>
+        <span data-i18n="pausedSites"></span>
+        <span class="count" id="pausedCount"></span>
+      </summary>
+      <ul class="paused-list" id="pausedList"></ul>
+    </details>
+
+    <footer>
+      <a class="author" href="https://ahmadalhalabi.com/" target="_blank" rel="noopener">
+        <span data-i18n="footerMadeBy"></span>
+        <span class="author-site">
+          ahmadalhalabi.com
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17L17 7M9 7h8v8"/></svg>
         </span>
-      </span>
-      <select id="idleTimeout" aria-describedby="idleTimeoutHint">
-        <option value="0">Off</option>
-        <option value="5000">5 seconds</option>
-        <option value="15000">15 seconds</option>
-        <option value="30000">30 seconds</option>
-      </select>
-    </div>
+      </a>
+    </footer>
 
-    <div class="row">
-      <span class="row-text">
-        <label class="row-title" for="panicEnabled">Panic Button</label>
-        <span class="row-hint" id="panicEnabledHint">
-          Press <kbd>Esc</kbd> to black out the screen instantly. Press it again to restore.
-        </span>
-      </span>
-      <span class="switch">
-        <input type="checkbox" id="panicEnabled" aria-describedby="panicEnabledHint">
-        <span class="track"></span>
-      </span>
-    </div>
-  </div>
+  </main>
 
-  <div id="status" class="status">Loading...</div>
-
-  <div class="info">The clear window follows your mouse cursor.</div>
-
+  <script src="settings.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>
