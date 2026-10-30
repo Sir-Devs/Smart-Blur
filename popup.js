@@ -150,7 +150,7 @@
         if (status === 'paused' && rules[0] !== site) setMessage(el.siteHint, 'hintPausedRule', rules[0]);
 
         const domain = Settings.registrableDomain(site);
-        if (status === 'active' && domain && domain !== 'file://') {
+        if (status === 'active' && domain && domain.includes('.') && !/^[\d.]+$/.test(domain)) {
             setMessage(el.siteDomain, 'pauseDomain', '*.' + domain);
             el.siteDomain.dataset.rule = '*.' + domain;
             el.siteDomain.hidden = false;
