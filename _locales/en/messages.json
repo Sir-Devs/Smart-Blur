@@ -238,5 +238,59 @@
   },
   "toastReleased": {
     "message": "Focus released"
+  },
+  "commandCycleShape": {
+    "message": "Switch the spotlight shape"
+  },
+  "shapeLabel": {
+    "message": "Spotlight shape"
+  },
+  "shapeCircle": {
+    "message": "Circle"
+  },
+  "shapeBand": {
+    "message": "Line"
+  },
+  "shapeBlock": {
+    "message": "Paragraph"
+  },
+  "bandHeight": {
+    "message": "Line height"
+  },
+  "blockHint": {
+    "message": "The paragraph under the cursor stays clear."
+  },
+  "typingTitle": {
+    "message": "Keep typing clear"
+  },
+  "typingHint": {
+    "message": "The field you type in stays readable."
+  },
+  "pauseDomain": {
+    "message": "Pause all of $SITE$",
+    "placeholders": {
+      "site": {
+        "content": "$1",
+        "example": "example.com"
+      }
+    }
+  },
+  "hintPausedRule": {
+    "message": "Paused by the rule $SITE$",
+    "placeholders": {
+      "site": {
+        "content": "$1",
+        "example": "example.com"
+      }
+    }
+  },
+  "ruleAdd": {
+    "message": "Add"
+  },
+  "ruleAddLabel": {
+    "message": "Site or *.domain to pause"
+  },
+  "ruleInvalid": {
+    "message": "Use a site like news.example.com or *.example.com"
   }
 }

@@ -12,6 +12,11 @@
     --sb-blur: 8px;
     --sb-dur: 160ms;
     --sb-ease: ease;
+    /* Six rectangles subtracted from the blur: pinned region, typing field, hovered block, videos.
+       content.js writes their positions and sizes; CUTOUT_SLOTS there must match. */
+    --sb-rects:
+        linear-gradient(black, black), linear-gradient(black, black), linear-gradient(black, black),
+        linear-gradient(black, black), linear-gradient(black, black), linear-gradient(black, black);
 
     display: block;
     position: fixed;
@@ -27,18 +32,31 @@
         radial-gradient(circle at var(--sb-x) var(--sb-y),
             transparent var(--sb-r),
             black calc(var(--sb-r) * 1.22)),
-        linear-gradient(black, black),
-        linear-gradient(black, black),
-        linear-gradient(black, black),
-        linear-gradient(black, black);
-    mask-position: 0 0, -9999px -9999px, -9999px -9999px, -9999px -9999px, -9999px -9999px;
-    mask-size: 100% 100%, 0 0, 0 0, 0 0, 0 0;
+        var(--sb-rects);
+    mask-position: 0 0, -9999px -9999px, -9999px -9999px, -9999px -9999px, -9999px -9999px, -9999px -9999px, -9999px -9999px;
+    mask-size: 100% 100%, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0;
     mask-repeat: no-repeat;
-    mask-composite: subtract, add, add, add, add;
+    mask-composite: subtract, add, add, add, add, add, add;
 
     transition:
         --sb-r var(--sb-dur) var(--sb-ease),
         background-color 0.25s ease;
+}
+
+/* Reading line: a clear horizontal band that follows the pointer vertically. */
+#smart-blur-veil[data-shape="band"] {
+    mask-image:
+        linear-gradient(to bottom,
+            black calc(var(--sb-y) - var(--sb-r) * 1.2),
+            transparent calc(var(--sb-y) - var(--sb-r)),
+            transparent calc(var(--sb-y) + var(--sb-r)),
+            black calc(var(--sb-y) + var(--sb-r) * 1.2)),
+        var(--sb-rects);
+}
+
+/* Paragraph mode: no spotlight, only the rectangles are clear. */
+#smart-blur-veil[data-shape="block"] {
+    mask-image: linear-gradient(black, black), var(--sb-rects);
 }
 
 #smart-blur-veil.sb-enter {
@@ -50,9 +68,11 @@
     to   { opacity: 1; }
 }
 
+/* Fully opaque: the panic layer has to hide everything, including the shapes of content. */
 #smart-blur-veil.sb-panic {
-    background-color: rgb(9 10 20 / 0.97);
-    backdrop-filter: blur(40px);
+    background-color: rgb(9 10 20);
+    backdrop-filter: none;
+    mask-image: none;
     transition: none;
 }
 
@@ -64,9 +84,9 @@
     right: 0;
     bottom: 28px;
     text-align: center;
-    font: 500 12px/1.4 system-ui, -apple-system, "Segoe UI", Tahoma, Arial, sans-serif;
+    font: 500 13px/1.4 system-ui, -apple-system, "Segoe UI", Tahoma, Arial, sans-serif;
     letter-spacing: 0.02em;
-    color: rgb(255 255 255 / 0.4);
+    color: rgb(255 255 255 / 0.55);
     opacity: 0;
 }
 
@@ -94,16 +114,30 @@
     height: calc(var(--sb-r) * 2);
     transform: translate3d(var(--sb-x), var(--sb-y), 0) translate(-50%, -50%);
 
+    /* Two strokes, one light and one dark, so the edge reads on white and on black pages. */
     border-radius: 50%;
-    border: 1.5px solid rgb(255 255 255 / 0.6);
+    border: 2px solid rgb(255 255 255 / 0.9);
     box-shadow:
-        0 0 0 1px rgb(0 0 0 / 0.12),
-        0 0 26px 1px rgb(34 211 238 / 0.18),
-        inset 0 0 22px rgb(168 85 247 / 0.12);
+        0 0 0 1px rgb(0 0 0 / 0.4),
+        inset 0 0 0 1px rgb(0 0 0 / 0.25),
+        0 0 26px 1px rgb(34 211 238 / 0.22),
+        inset 0 0 22px rgb(168 85 247 / 0.14);
 
     transition:
         --sb-r var(--sb-dur) var(--sb-ease),
         opacity 0.2s ease;
+}
+
+#smart-blur-ring[data-shape="band"] {
+    width: 100vw;
+    border-radius: 0;
+    border-width: 2px 0;
+    transform: translate3d(0, var(--sb-y), 0) translate(0, -50%);
+    border-color: #22d3ee;
+    box-shadow:
+        0 -1px 0 rgb(0 0 0 / 0.35),
+        0 1px 0 rgb(0 0 0 / 0.35),
+        0 0 18px rgb(34 211 238 / 0.3);
 }
 
 #smart-blur-ring.sb-hidden {
@@ -148,18 +182,18 @@
     display: block;
     position: absolute;
     left: -2px;
-    top: -27px;
+    top: -28px;
     max-width: calc(100% + 4px);
     box-sizing: border-box;
     padding: 4px 10px;
     border-radius: 6px 6px 0 0;
 
-    font: 600 12px/1.5 system-ui, -apple-system, "Segoe UI", Tahoma, Arial, sans-serif;
-    color: #fff;
+    font: 600 12.5px/1.5 system-ui, -apple-system, "Segoe UI", Tahoma, Arial, sans-serif;
+    color: #0a0b16;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    background: linear-gradient(90deg, #8b5cf6, #06b6d4);
+    background: linear-gradient(90deg, #a855f7, #22d3ee);
 }
 
 #smart-blur-marquee.sb-label-inside .sb-label {
@@ -190,7 +224,7 @@ html.sb-picking * {
     background: rgb(14 15 28 / 0.94);
     box-shadow: 0 10px 30px rgb(0 0 0 / 0.35);
 
-    font: 500 13px/1.45 system-ui, -apple-system, "Segoe UI", Tahoma, Arial, sans-serif;
+    font: 500 13.5px/1.45 system-ui, -apple-system, "Segoe UI", Tahoma, Arial, sans-serif;
     color: #f4f5ff;
     white-space: nowrap;
     overflow: hidden;

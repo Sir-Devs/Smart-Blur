@@ -238,5 +238,59 @@
   },
   "toastReleased": {
     "message": "تم إلغاء التركيز"
+  },
+  "commandCycleShape": {
+    "message": "تبديل شكل بقعة الرؤية"
+  },
+  "shapeLabel": {
+    "message": "شكل بقعة الرؤية"
+  },
+  "shapeCircle": {
+    "message": "دائرة"
+  },
+  "shapeBand": {
+    "message": "سطر"
+  },
+  "shapeBlock": {
+    "message": "فقرة"
+  },
+  "bandHeight": {
+    "message": "ارتفاع السطر"
+  },
+  "blockHint": {
+    "message": "الفقرة تحت المؤشر تبقى واضحة."
+  },
+  "typingTitle": {
+    "message": "إبقاء الكتابة واضحة"
+  },
+  "typingHint": {
+    "message": "الحقل الذي تكتب فيه يبقى مقروءاً."
+  },
+  "pauseDomain": {
+    "message": "إيقاف كل $SITE$",
+    "placeholders": {
+      "site": {
+        "content": "$1",
+        "example": "example.com"
+      }
+    }
+  },
+  "hintPausedRule": {
+    "message": "متوقف بسبب القاعدة $SITE$",
+    "placeholders": {
+      "site": {
+        "content": "$1",
+        "example": "example.com"
+      }
+    }
+  },
+  "ruleAdd": {
+    "message": "إضافة"
+  },
+  "ruleAddLabel": {
+    "message": "موقع أو نطاق كامل لإيقافه"
+  },
+  "ruleInvalid": {
+    "message": "اكتب موقعاً مثل news.example.com أو *.example.com"
   }
 }

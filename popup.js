@@ -15,11 +15,19 @@
         siteTitle: $('siteTitle'),
         siteHint: $('siteHint'),
         siteToggle: $('siteToggle'),
+        siteDomain: $('siteDomain'),
+        spotlightShape: $('spotlightShape'),
+        sizeSlider: $('sizeSlider'),
+        sizeLabel: $('spotlightSizeLabel'),
+        blockHint: $('blockHint'),
         focusHowto: $('focusHowto'),
         idleTimeout: $('idleTimeout'),
         pausedBox: $('pausedBox'),
         pausedCount: $('pausedCount'),
         pausedList: $('pausedList'),
+        addRule: $('addRule'),
+        ruleInput: $('ruleInput'),
+        ruleError: $('ruleError'),
         shortcutKeys: $('shortcutKeys'),
         shortcutChange: $('shortcutChange'),
         version: $('version')
@@ -86,16 +94,31 @@
         return key === 'file://' ? t('localFiles') : key;
     }
 
+    // Host names go into their own <bdi>, otherwise "*.example.com" comes out
+    // as "example.com.*" inside an Arabic sentence.
+    function setMessage(node, key, host) {
+        const parts = t(key, ['@@']).split('@@');
+        const name = document.createElement('bdi');
+        name.dir = 'ltr';
+        name.textContent = displaySite(host);
+        node.replaceChildren(parts[0], name, parts[1] || '');
+    }
+
+    function rulesFor(host) {
+        return Settings.matchingRules(state, host);
+    }
+
     function siteStatus() {
         if (!siteKnown) return 'loading';
         if (!site) return 'unavailable';
         if (!state.globalEnabled) return 'off';
-        return state.disabledSites.includes(site) ? 'paused' : 'active';
+        return rulesFor(site).length ? 'paused' : 'active';
     }
 
     function renderSite() {
         const status = siteStatus();
         el.siteCard.dataset.state = status;
+        el.siteDomain.hidden = true;
         if (status === 'loading') {
             el.siteTitle.textContent = t('statusLoading');
             el.siteHint.textContent = '';
@@ -121,7 +144,27 @@
         el.siteHint.textContent = hints[status];
 
         el.siteToggle.hidden = status === 'unavailable' || status === 'off';
-        el.siteToggle.textContent = state.disabledSites.includes(site) ? t('resumeSite') : t('pauseSite');
+        el.siteToggle.textContent = status === 'paused' ? t('resumeSite') : t('pauseSite');
+
+        const rules = rulesFor(site);
+        if (status === 'paused' && rules[0] !== site) setMessage(el.siteHint, 'hintPausedRule', rules[0]);
+
+        const domain = Settings.registrableDomain(site);
+        if (status === 'active' && domain && domain !== 'file://') {
+            setMessage(el.siteDomain, 'pauseDomain', '*.' + domain);
+            el.siteDomain.dataset.rule = '*.' + domain;
+            el.siteDomain.hidden = false;
+        }
+    }
+
+    function renderShape() {
+        const shape = state.spotlightShape;
+        for (const button of el.spotlightShape.querySelectorAll('button')) {
+            button.setAttribute('aria-checked', String(button.dataset.shape === shape));
+        }
+        el.sizeSlider.hidden = shape === 'block';
+        el.blockHint.hidden = shape !== 'block';
+        el.sizeLabel.textContent = shape === 'band' ? t('bandHeight') : t('spotlightSize');
     }
 
     function renderSlider(input) {
@@ -140,7 +183,7 @@
 
     function renderPausedList() {
         const sites = state.disabledSites;
-        el.pausedBox.hidden = sites.length === 0;
+        el.pausedCount.hidden = sites.length === 0;
         el.pausedCount.textContent = String(sites.length);
 
         const items = sites.slice().sort().map(function (host) {
@@ -164,6 +207,7 @@
     function render() {
         el.globalEnabled.checked = state.globalEnabled;
         renderSite();
+        renderShape();
 
         sliders.forEach(renderSlider);
         for (const input of toggles) input.checked = state[input.dataset.key];
@@ -176,9 +220,14 @@
         renderPausedList();
     }
 
-    function setSitePaused(host, paused) {
-        const others = state.disabledSites.filter(function (s) { return s !== host; });
-        Settings.save({ disabledSites: paused ? others.concat([host]) : others });
+    // Resuming a site also lifts any *.domain rule that covers it.
+    function setSitePaused(host, paused, rule) {
+        const others = state.disabledSites.filter(function (r) { return !Settings.ruleMatches(r, host); });
+        Settings.save({ disabledSites: paused ? others.concat([rule || host]) : others });
+    }
+
+    function removeRule(rule) {
+        Settings.save({ disabledSites: state.disabledSites.filter(function (r) { return r !== rule; }) });
     }
 
     function bindControls() {
@@ -187,7 +236,21 @@
         });
 
         el.siteToggle.addEventListener('click', function () {
-            if (site) setSitePaused(site, !state.disabledSites.includes(site));
+            if (site) setSitePaused(site, rulesFor(site).length === 0);
+        });
+
+        el.siteDomain.addEventListener('click', function () {
+            if (site) setSitePaused(site, true, el.siteDomain.dataset.rule);
+        });
+
+        el.spotlightShape.addEventListener('click', function (event) {
+            const button = event.target.closest('button[data-shape]');
+            if (!button || button.dataset.shape === state.spotlightShape) return;
+            const patch = { spotlightShape: button.dataset.shape };
+            // A reading line wants a much smaller size than a circle.
+            if (patch.spotlightShape === 'band') patch.spotlightSize = 90;
+            else if (state.spotlightShape === 'band') patch.spotlightSize = Settings.DEFAULTS.spotlightSize;
+            Settings.save(patch);
         });
 
         for (const input of sliders) {
@@ -221,7 +284,24 @@
 
         el.pausedList.addEventListener('click', function (event) {
             const button = event.target.closest('button[data-site]');
-            if (button) setSitePaused(button.dataset.site, false);
+            if (button) removeRule(button.dataset.site);
+        });
+
+        el.addRule.addEventListener('submit', function (event) {
+            event.preventDefault();
+            const rule = Settings.normalizeRule(el.ruleInput.value);
+            el.ruleInput.setAttribute('aria-invalid', String(!rule));
+            el.ruleError.hidden = Boolean(rule);
+            if (!rule) return;
+            if (!state.disabledSites.includes(rule)) {
+                Settings.save({ disabledSites: state.disabledSites.concat([rule]) });
+            }
+            el.ruleInput.value = '';
+        });
+
+        el.ruleInput.addEventListener('input', function () {
+            el.ruleInput.removeAttribute('aria-invalid');
+            el.ruleError.hidden = true;
         });
 
         el.shortcutChange.addEventListener('click', function () {

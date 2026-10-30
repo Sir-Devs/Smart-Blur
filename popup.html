@@ -32,18 +32,36 @@
       <div class="site-text">
         <p class="site-title" id="siteTitle">&nbsp;</p>
         <p class="site-hint" id="siteHint"></p>
+        <button type="button" class="link" id="siteDomain" hidden></button>
       </div>
       <button type="button" class="btn" id="siteToggle" hidden></button>
     </section>
 
-    <section class="card sliders" data-i18n-aria="sectionSpotlight">
-      <div class="slider">
+    <section class="card spotlight" data-i18n-aria="sectionSpotlight">
+      <div class="shapes" id="spotlightShape" role="radiogroup" data-i18n-aria="shapeLabel">
+        <button type="button" role="radio" data-shape="circle">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7"/></svg>
+          <span data-i18n="shapeCircle"></span>
+        </button>
+        <button type="button" role="radio" data-shape="band">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9h18M3 15h18"/></svg>
+          <span data-i18n="shapeBand"></span>
+        </button>
+        <button type="button" role="radio" data-shape="block">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="6" width="14" height="12" rx="1.5" stroke-dasharray="3 2.4"/></svg>
+          <span data-i18n="shapeBlock"></span>
+        </button>
+      </div>
+
+      <div class="sliders">
+      <div class="slider" id="sizeSlider">
         <div class="slider-head">
-          <label for="spotlightSize" data-i18n="spotlightSize"></label>
+          <label for="spotlightSize" id="spotlightSizeLabel" data-i18n="spotlightSize"></label>
           <output id="spotlightSizeValue" for="spotlightSize"></output>
         </div>
         <input type="range" id="spotlightSize" data-key="spotlightSize">
       </div>
+      <p class="block-hint" id="blockHint" data-i18n="blockHint" hidden></p>
 
       <div class="slider">
         <div class="slider-head">
@@ -51,6 +69,7 @@
           <output id="blurStrengthValue" for="blurStrength"></output>
         </div>
         <input type="range" id="blurStrength" data-key="blurStrength">
+      </div>
       </div>
     </section>
 
@@ -67,6 +86,21 @@
         </div>
         <label class="switch">
           <input type="checkbox" id="keepVideosClear" role="switch" data-key="keepVideosClear">
+          <span class="track" aria-hidden="true"></span>
+        </label>
+      </div>
+
+      <div class="row">
+        <svg class="row-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="2.5" y="6" width="19" height="12" rx="2.5"/>
+          <path d="M6.5 10h.01M10 10h.01M13.5 10h.01M17 10h.01M8 14h8"/>
+        </svg>
+        <div class="row-text">
+          <label class="row-title" for="keepTypingClear" data-i18n="typingTitle"></label>
+          <span class="row-hint" data-i18n="typingHint"></span>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="keepTypingClear" role="switch" data-key="keepTypingClear">
           <span class="track" aria-hidden="true"></span>
         </label>
       </div>
@@ -121,12 +155,17 @@
       </div>
     </section>
 
-    <details class="card paused" id="pausedBox" hidden>
+    <details class="card paused" id="pausedBox">
       <summary>
         <span data-i18n="pausedSites"></span>
-        <span class="count" id="pausedCount"></span>
+        <span class="count" id="pausedCount" hidden></span>
       </summary>
       <ul class="paused-list" id="pausedList"></ul>
+      <form class="add-rule" id="addRule" novalidate>
+        <input type="text" id="ruleInput" placeholder="*.example.com" spellcheck="false" autocomplete="off" data-i18n-aria="ruleAddLabel">
+        <button type="submit" data-i18n="ruleAdd"></button>
+      </form>
+      <p class="rule-error" id="ruleError" role="alert" data-i18n="ruleInvalid" hidden></p>
     </details>
 
     <footer>

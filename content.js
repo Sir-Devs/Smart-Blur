@@ -23,7 +23,8 @@
 
     const XHTML_NS = 'http://www.w3.org/1999/xhtml';
 
-    const CUTOUT_SLOTS = 4;
+    // Must match the number of rectangle layers in content.css.
+    const CUTOUT_SLOTS = 6;
     const PARKED_POSITION = '-9999px -9999px';
     const PARKED_SIZE = '0px 0px';
 
@@ -34,8 +35,20 @@
         'iframe[src*="player.vimeo.com"]',
         'iframe[src*="dailymotion.com/embed"]',
         'iframe[src*="geo.dailymotion.com"]',
-        'iframe[src*="player.twitch.tv"]'
+        'iframe[src*="player.twitch.tv"]',
+        'iframe[src*="loom.com/embed"]',
+        'iframe[src*="fast.wistia"]',
+        'iframe[src*="facebook.com/plugins/video"]',
+        'iframe[src*="player.kick.com"]',
+        'iframe[src*="streamable.com"]',
+        'iframe[src*="player.bilibili.com"]',
+        'iframe[src*="embed.ted.com"]'
     ].join(',');
+
+    // What counts as a paragraph for the paragraph spotlight.
+    const BLOCK_SELECTOR = 'p,li,dt,dd,blockquote,pre,h1,h2,h3,h4,h5,h6,td,th,figure,figcaption,summary,label';
+
+    const TEXT_INPUT_TYPES = ['', 'text', 'search', 'email', 'url', 'tel', 'password', 'number'];
 
     const MIN_MEDIA_AREA = 100 * 80;
     const MIN_PICK_AREA = 400;
@@ -43,8 +56,11 @@
     const REATTACH_LIMIT = 5;
     const GEOMETRY_POLL_MS = 250;
     const DOUBLE_ESC_MS = 450;
+    const ALT_HOLD_MS = 250;
     const TOAST_MS = 2800;
     const WHEEL_STEP = 50;
+    // Big editors only clear the lines around the caret, not the whole editor.
+    const TALL_EDITOR_PX = 160;
 
     const SHAPE_MODES = {
         close:   { rank: 0, duration: '700ms', easing: 'ease-in' },
@@ -86,9 +102,17 @@
     let idleTimer = 0;
     let lastEscAt = 0;
 
+    // Alt has to be held alone for a moment, so Alt+Shift+S and quick Alt+clicks still reach the page.
+    let altTimer = 0;
+    let altDown = false;
+    let altCombo = false;
+
     let focusRoot = null;
     let focusPage = '';
     const pick = { active: false, base: null, depth: 0, target: null, shown: false, wheel: 0 };
+
+    let typingEl = null;
+    let hoverBlock = null;
 
     let frameId = 0;
     const dirty = { pointer: false, shape: false, geometry: false, pick: false };
@@ -173,6 +197,8 @@
     }
 
     function spotlightRadius() {
+        const shape = settings.spotlightShape;
+        if (shape !== 'circle' && shape !== 'band') return 0;
         if (!pointer.inside || panicOn || autoBlurred || focusRoot) return 0;
         return settings.spotlightSize / 2;
     }
@@ -191,11 +217,13 @@
         const radius = spotlightRadius();
         const veil = nodes.veil;
         const ring = nodes.ring;
+        const shape = settings.spotlightShape;
 
         for (const el of [veil, ring]) {
             el.style.setProperty('--sb-dur', preset.duration);
             el.style.setProperty('--sb-ease', preset.easing);
             el.style.setProperty('--sb-r', radius + 'px');
+            el.dataset.shape = shape;
         }
 
         veil.style.setProperty('--sb-blur', settings.blurStrength + 'px');
@@ -204,6 +232,7 @@
     }
 
     function pushRect(list, rect, minArea) {
+        if (list.length >= CUTOUT_SLOTS) return;
         if (rect.width * rect.height < minArea) return;
         if (rect.bottom <= 0 || rect.right <= 0) return;
         if (rect.top >= window.innerHeight || rect.left >= window.innerWidth) return;
@@ -215,12 +244,60 @@
         });
     }
 
+    function isEditable(el) {
+        if (!el || el.nodeType !== 1) return false;
+        if (el.isContentEditable) return true;
+        if (el.localName === 'textarea') return !el.readOnly && !el.disabled;
+        if (el.localName === 'input') {
+            return TEXT_INPUT_TYPES.includes(el.type) && !el.readOnly && !el.disabled;
+        }
+        return false;
+    }
+
+    // Focus inside shadow roots (web components, many editors) is reported on the host.
+    function deepActiveElement() {
+        let el = document.activeElement;
+        while (el && el.shadowRoot && el.shadowRoot.activeElement) el = el.shadowRoot.activeElement;
+        return el;
+    }
+
+    function typingRect() {
+        const el = typingEl;
+        if (!el || !el.isConnected) return null;
+        const box = el.getBoundingClientRect();
+        if (!el.isContentEditable || box.height <= TALL_EDITOR_PX) return box;
+
+        const selection = document.getSelection();
+        if (!selection || selection.rangeCount === 0) return null;
+        const range = selection.getRangeAt(0);
+        let caret = range.getClientRects()[0] || range.getBoundingClientRect();
+        if (!caret || caret.height === 0) {
+            const node = selection.focusNode && selection.focusNode.nodeType === 1
+                ? selection.focusNode : selection.focusNode && selection.focusNode.parentElement;
+            if (!node) return null;
+            caret = node.getBoundingClientRect();
+        }
+        const line = Math.max(caret.height, 16);
+        const top = Math.max(box.top, caret.top - line * 1.5);
+        const bottom = Math.min(box.bottom, caret.bottom + line * 1.5);
+        return { left: box.left, top: top, right: box.right, bottom: bottom, width: box.width, height: bottom - top };
+    }
+
     function readCutouts() {
         const rects = [];
         if (panicOn) return rects;
 
         if (focusRoot && !autoBlurred && focusRoot.isConnected) {
             pushRect(rects, focusRoot.getBoundingClientRect(), 1);
+        }
+
+        if (settings.keepTypingClear && typingEl && !autoBlurred) {
+            const r = typingRect();
+            if (r) pushRect(rects, r, 1);
+        }
+
+        if (settings.spotlightShape === 'block' && hoverBlock && pointer.inside && !autoBlurred && !focusRoot) {
+            if (hoverBlock.isConnected) pushRect(rects, hoverBlock.getBoundingClientRect(), 1);
         }
 
         if (settings.keepVideosClear && visibleMedia.size > 0) {
@@ -262,8 +339,8 @@
     }
 
     function updatePoll() {
-        const needed = mounted && !panicOn &&
-            (focusRoot !== null || (settings.keepVideosClear && visibleMedia.size > 0));
+        const needed = mounted && !panicOn && document.visibilityState === 'visible' &&
+            (focusRoot !== null || typingEl !== null || (settings.keepVideosClear && visibleMedia.size > 0));
 
         if (needed && !pollTimer) {
             pollTimer = setInterval(requestGeometry, GEOMETRY_POLL_MS);
@@ -289,14 +366,33 @@
         requestGeometry();
     }
 
-    function scanMedia() {
-        if (!mediaObserver) return;
-        const found = document.querySelectorAll(MEDIA_SELECTOR);
+    function observeMediaIn(root) {
+        const found = root.querySelectorAll(MEDIA_SELECTOR);
         for (let i = 0; i < found.length; i++) {
             const el = found[i];
             if (observedMedia.has(el)) continue;
             observedMedia.add(el);
             mediaObserver.observe(el);
+        }
+    }
+
+    // querySelectorAll stops at shadow boundaries, and many players are web components.
+    function scanMedia() {
+        if (!mediaObserver) return;
+        observeMediaIn(document);
+
+        const walker = document.createTreeWalker(document.documentElement, NodeFilter.SHOW_ELEMENT);
+        const roots = [];
+        for (let el = walker.currentNode; el; el = walker.nextNode()) {
+            if (el.shadowRoot) roots.push(el.shadowRoot);
+        }
+        while (roots.length) {
+            const root = roots.pop();
+            observeMediaIn(root);
+            const inner = root.querySelectorAll('*');
+            for (let i = 0; i < inner.length; i++) {
+                if (inner[i].shadowRoot) roots.push(inner[i].shadowRoot);
+            }
         }
     }
 
@@ -396,6 +492,8 @@
     }
 
     function stopPicking() {
+        clearTimeout(altTimer);
+        altTimer = 0;
         if (!pick.active) return;
         pick.active = false;
         pick.base = null;
@@ -439,8 +537,9 @@
         retarget();
     }
 
+    // Alt+clicks are only swallowed while picking or to release a pin.
     function onPickPointer(event) {
-        if (!event.altKey || (!settings.articleFocus && !focusRoot)) return;
+        if (!event.altKey || !(pick.active || focusRoot)) return;
 
         // Alt+click on a link starts a download in Chrome, so swallow the whole click.
         event.preventDefault();
@@ -452,7 +551,7 @@
             return;
         }
 
-        const target = (pick.active && pick.target) || event.target;
+        const target = pick.target || event.target;
         if (!target || target.nodeType !== 1 || isOwnNode(target)) return;
         if (target === document.body || target === document.documentElement) return;
         const rect = target.getBoundingClientRect();
@@ -542,16 +641,33 @@
         }, TOAST_MS);
     }
 
-    function onPointerMove(event) {
-        pointer.x = event.clientX;
-        pointer.y = event.clientY;
+    function movePointer(x, y) {
+        pointer.x = x;
+        pointer.y = y;
         dirty.pointer = true;
-
         if (!pointer.inside) {
             pointer.inside = true;
             requestShape('instant');
         }
+    }
+
+    function trackBlock(target) {
+        if (settings.spotlightShape !== 'block') return;
+        const el = target && target.nodeType === 1 && !isOwnNode(target) ? target.closest(BLOCK_SELECTOR) : null;
+        if (el !== hoverBlock) {
+            hoverBlock = el;
+            requestGeometry();
+        }
+    }
+
+    function altHeld() {
+        return altTimer === 0 && !altCombo && altDown;
+    }
+
+    function onPointerMove(event) {
+        movePointer(event.clientX, event.clientY);
         markActivity();
+        trackBlock(event.target);
 
         if (pick.active) {
             if (!event.altKey) {
@@ -560,43 +676,94 @@
                 pick.base = event.target;
                 retarget();
             }
-        } else if (event.altKey && settings.articleFocus) {
+        } else if (event.altKey && settings.articleFocus && altHeld()) {
             startPicking(event.target);
         }
 
         requestFrame();
     }
 
+    // Touch and pen have no hover, so the spotlight goes where the screen is touched and stays there.
+    function onPointerDown(event) {
+        markActivity();
+        if (event.pointerType === 'mouse') return;
+        movePointer(event.clientX, event.clientY);
+        trackBlock(event.target);
+        requestFrame();
+    }
+
     function onDragOver(event) {
-        pointer.x = event.clientX;
-        pointer.y = event.clientY;
-        dirty.pointer = true;
-        if (!pointer.inside) {
-            pointer.inside = true;
-            requestShape('instant');
-        }
+        movePointer(event.clientX, event.clientY);
         markActivity();
         requestFrame();
     }
 
     function onPointerOut(event) {
+        if (event.pointerType && event.pointerType !== 'mouse') return;
         if (event.relatedTarget || !pointer.inside) return;
         pointer.inside = false;
         requestShape('normal');
+        requestGeometry();
     }
 
     function onKeyDown(event) {
         markActivity();
+        if (typingEl) requestGeometry();
 
         if (event.key === 'Escape') {
             handleEscape(event);
-        } else if (event.key === 'Alt' && !event.repeat && settings.articleFocus) {
-            startPicking(pointer.inside ? document.elementFromPoint(pointer.x, pointer.y) : null);
+            return;
+        }
+        if (event.key === 'Alt') {
+            if (event.repeat || !settings.articleFocus) return;
+            altDown = true;
+            altCombo = false;
+            clearTimeout(altTimer);
+            altTimer = setTimeout(function () {
+                altTimer = 0;
+                if (!altCombo && altDown) {
+                    startPicking(pointer.inside ? document.elementFromPoint(pointer.x, pointer.y) : null);
+                }
+            }, ALT_HOLD_MS);
+        } else if (altDown) {
+            altCombo = true;
+            stopPicking();
         }
     }
 
     function onKeyUp(event) {
-        if (event.key === 'Alt') stopPicking();
+        if (event.key === 'Alt') {
+            altDown = false;
+            stopPicking();
+        }
+    }
+
+    function onWindowBlur() {
+        altDown = false;
+        stopPicking();
+    }
+
+    function onFocusIn() {
+        const el = deepActiveElement();
+        const next = isEditable(el) ? el : null;
+        if (next === typingEl) return;
+        typingEl = next;
+        updatePoll();
+        requestGeometry();
+    }
+
+    function onFocusOut() {
+        // focusout fires before the next element is focused, so look again after it settles.
+        queueMicrotask(onFocusIn);
+    }
+
+    function onSelectionChange() {
+        if (typingEl && typingEl.isContentEditable) requestGeometry();
+    }
+
+    function onVisibilityChange() {
+        updatePoll();
+        if (document.visibilityState === 'visible') requestGeometry();
     }
 
     function onDomMutations(records) {
@@ -627,7 +794,8 @@
 
         if (focusRoot && (pageKey() !== focusPage || !focusRoot.isConnected)) setFocus(null, true);
 
-        scanMedia();
+        // A hidden tab has nothing to draw; the next visibility change rescans.
+        if (document.visibilityState === 'visible') scanMedia();
         requestGeometry();
     }
 
@@ -715,11 +883,15 @@
         window.addEventListener('pointermove', onPointerMove, PASSIVE_CAPTURE);
         window.addEventListener('pointerout', onPointerOut, PASSIVE_CAPTURE);
         window.addEventListener('dragover', onDragOver, PASSIVE_CAPTURE);
-        window.addEventListener('pointerdown', markActivity, PASSIVE_CAPTURE);
+        window.addEventListener('pointerdown', onPointerDown, PASSIVE_CAPTURE);
         window.addEventListener('wheel', markActivity, PASSIVE_CAPTURE);
         window.addEventListener('keydown', onKeyDown, true);
         window.addEventListener('keyup', onKeyUp, true);
-        window.addEventListener('blur', stopPicking);
+        window.addEventListener('blur', onWindowBlur);
+        window.addEventListener('focusin', onFocusIn, true);
+        window.addEventListener('focusout', onFocusOut, true);
+        document.addEventListener('selectionchange', onSelectionChange);
+        document.addEventListener('visibilitychange', onVisibilityChange);
 
         window.addEventListener('pointerdown', onPickPointer, true);
         window.addEventListener('mousedown', onPickPointer, true);
@@ -746,6 +918,7 @@
         });
 
         scanMedia();
+        onFocusIn();
         lastActivity = performance.now();
         armIdle(settings.idleTimeout);
         requestShape('instant');
@@ -759,11 +932,15 @@
         window.removeEventListener('pointermove', onPointerMove, PASSIVE_CAPTURE);
         window.removeEventListener('pointerout', onPointerOut, PASSIVE_CAPTURE);
         window.removeEventListener('dragover', onDragOver, PASSIVE_CAPTURE);
-        window.removeEventListener('pointerdown', markActivity, PASSIVE_CAPTURE);
+        window.removeEventListener('pointerdown', onPointerDown, PASSIVE_CAPTURE);
         window.removeEventListener('wheel', markActivity, PASSIVE_CAPTURE);
         window.removeEventListener('keydown', onKeyDown, true);
         window.removeEventListener('keyup', onKeyUp, true);
-        window.removeEventListener('blur', stopPicking);
+        window.removeEventListener('blur', onWindowBlur);
+        window.removeEventListener('focusin', onFocusIn, true);
+        window.removeEventListener('focusout', onFocusOut, true);
+        document.removeEventListener('selectionchange', onSelectionChange);
+        document.removeEventListener('visibilitychange', onVisibilityChange);
         window.removeEventListener('pointerdown', onPickPointer, true);
         window.removeEventListener('mousedown', onPickPointer, true);
         window.removeEventListener('mouseup', onPickPointer, true);
@@ -775,6 +952,7 @@
         window.removeEventListener('toggle', onToggle, true);
 
         stopPicking();
+        altDown = false;
 
         if (mediaObserver) mediaObserver.disconnect();
         if (resizeObserver) resizeObserver.disconnect();
@@ -793,6 +971,8 @@
 
         focusRoot = null;
         focusPage = '';
+        typingEl = null;
+        hoverBlock = null;
         panicOn = false;
         autoBlurred = false;
         pointer.inside = false;
@@ -818,11 +998,17 @@
             return;
         }
 
-        if (prev.spotlightSize !== next.spotlightSize || prev.blurStrength !== next.blurStrength) {
+        if (prev.spotlightSize !== next.spotlightSize || prev.blurStrength !== next.blurStrength ||
+            prev.spotlightShape !== next.spotlightShape) {
             requestShape('normal');
         }
 
-        if (prev.keepVideosClear !== next.keepVideosClear) {
+        if (prev.spotlightShape !== next.spotlightShape) {
+            hoverBlock = null;
+            requestGeometry();
+        }
+
+        if (prev.keepVideosClear !== next.keepVideosClear || prev.keepTypingClear !== next.keepTypingClear) {
             updatePoll();
             requestGeometry();
         }
@@ -916,6 +1102,9 @@
         window.addEventListener('pageshow', onPageShow);
         chrome.storage.onChanged.addListener(onStorageChanged);
         chrome.runtime.onMessage.addListener(onMessage);
+
+        // Blur with the defaults straight away; waiting for storage would let the page paint first.
+        if (site) mount(false);
         syncFromStorage(false);
     }
 

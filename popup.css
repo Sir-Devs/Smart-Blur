@@ -5,7 +5,7 @@
     --border: rgb(255 255 255 / 0.09);
     --text: #eef0ff;
     --muted: #9ca3c4;
-    --faint: #6b7294;
+    --faint: #858caf;
     --violet: #a855f7;
     --cyan: #22d3ee;
     --gradient: linear-gradient(135deg, #a855f7 0%, #6d8cf5 50%, #22d3ee 100%);
@@ -238,6 +238,12 @@ button {
     color: var(--muted);
 }
 
+.site .link {
+    margin-top: 3px;
+    font-size: 11.5px;
+    text-align: start;
+}
+
 .btn {
     flex: none;
     padding: 7px 12px;
@@ -268,10 +274,65 @@ button {
     border: 1px solid var(--border);
 }
 
+.spotlight {
+    display: grid;
+    gap: 12px;
+}
+
 .sliders {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 20px;
+}
+
+.shapes {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2px;
+    padding: 3px;
+    border-radius: 10px;
+    background: rgb(0 0 0 / 0.28);
+    border: 1px solid var(--border);
+}
+
+.shapes button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 5px 4px;
+    border: 0;
+    border-radius: 7px;
+    background: none;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.shapes button:hover {
+    color: var(--text);
+}
+
+.shapes button[aria-checked="true"] {
+    background: var(--gradient);
+    color: #0a0b16;
+}
+
+.shapes svg {
+    width: 15px;
+    height: 15px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.9;
+    stroke-linecap: round;
+}
+
+.block-hint {
+    align-self: center;
+    font-size: 11.5px;
+    color: var(--muted);
 }
 
 .features {
@@ -562,6 +623,51 @@ kbd {
 
 .paused-list button:hover {
     background: rgb(34 211 238 / 0.1);
+}
+
+.add-rule {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.add-rule input {
+    flex: 1;
+    min-width: 0;
+    padding: 5px 9px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: rgb(0 0 0 / 0.28);
+    color: var(--text);
+    font: 500 12px/1.5 ui-monospace, "Cascadia Mono", Consolas, Menlo, monospace;
+    direction: ltr;
+    text-align: left;
+}
+
+.add-rule input::placeholder {
+    color: var(--faint);
+}
+
+.add-rule input[aria-invalid="true"] {
+    border-color: var(--off);
+}
+
+.add-rule button {
+    flex: none;
+    padding: 5px 14px;
+    border: 0;
+    border-radius: 8px;
+    background: var(--gradient);
+    color: #0a0b16;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.rule-error {
+    margin-top: 6px;
+    font-size: 11.5px;
+    color: var(--off);
 }
 
 .link {

@@ -3,12 +3,14 @@ importScripts('settings.js');
 const Settings = self.SmartBlurSettings;
 
 const BADGE_OFF = 'OFF';
-const BADGE_COLOR = '#6b7280';
+// Chrome's own pages and the Web Store: no extension may run there, so don't imply protection.
+const BADGE_UNAVAILABLE = '–';
+const BADGE_COLOR = '#5B6170';
 
 function badgeTextFor(url, settings) {
     const site = Settings.siteKeyFromUrl(url || '');
-    const active = site ? Settings.isActiveOn(settings, site) : settings.globalEnabled;
-    return active ? '' : BADGE_OFF;
+    if (!site) return BADGE_UNAVAILABLE;
+    return Settings.isActiveOn(settings, site) ? '' : BADGE_OFF;
 }
 
 async function refreshBadge(tab, settings) {
@@ -27,6 +29,7 @@ async function refreshAllBadges() {
     await Promise.all(tabs.map(function (tab) { return refreshBadge(tab, settings); }));
 }
 
+// Content scripts only reach pages loaded after install, so tabs that were already open get them here.
 async function injectIntoOpenTabs() {
     const tabs = await chrome.tabs.query({
         url: ['http://*/*', 'https://*/*', 'file:///*'],
@@ -48,14 +51,12 @@ async function injectIntoOpenTabs() {
     }));
 }
 
-async function bootOnce() {
-    const { booted } = await chrome.storage.session.get('booted');
-    if (booted) return;
-    await chrome.storage.session.set({ booted: true });
-    await Promise.all([injectIntoOpenTabs(), refreshAllBadges()]);
-}
+chrome.runtime.onInstalled.addListener(function () {
+    injectIntoOpenTabs();
+    refreshAllBadges();
+});
 
-bootOnce();
+chrome.runtime.onStartup.addListener(refreshAllBadges);
 
 chrome.tabs.onUpdated.addListener(function (tabId, changeInfo, tab) {
     if (changeInfo.url || changeInfo.status === 'loading') refreshBadge(tab);
@@ -71,7 +72,13 @@ chrome.runtime.onMessage.addListener(function (message, sender) {
 });
 
 chrome.commands.onCommand.addListener(async function (command) {
-    if (command !== 'toggle-global') return;
     const settings = await Settings.load();
-    await Settings.save({ globalEnabled: !settings.globalEnabled });
+
+    if (command === 'toggle-global') {
+        await Settings.save({ globalEnabled: !settings.globalEnabled });
+    } else if (command === 'cycle-shape') {
+        const shapes = ['circle', 'band', 'block'];
+        const next = shapes[(shapes.indexOf(settings.spotlightShape) + 1) % shapes.length];
+        await Settings.save({ spotlightShape: next });
+    }
 });
