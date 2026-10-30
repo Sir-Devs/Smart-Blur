@@ -79,6 +79,9 @@ chrome.commands.onCommand.addListener(async function (command) {
     } else if (command === 'cycle-shape') {
         const shapes = ['circle', 'band', 'block'];
         const next = shapes[(shapes.indexOf(settings.spotlightShape) + 1) % shapes.length];
-        await Settings.save({ spotlightShape: next });
+        const patch = { spotlightShape: next };
+        if (next === 'band') patch.spotlightSize = 90;
+        else if (settings.spotlightShape === 'band') patch.spotlightSize = Settings.DEFAULTS.spotlightSize;
+        await Settings.save(patch);
     }
 });
